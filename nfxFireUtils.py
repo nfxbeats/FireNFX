@@ -256,7 +256,7 @@ def getMixerTrackForChannel(chan):
 def MuteMixerTrack(trk, newVal = -1):
     global _Patterns
     pat = next(x for x in _Patterns if x.Mixer.FLIndex == trk) 
-    patIdx = pat.FLIndex
+    patIdx = pat.FLIndex - 1 # 0 based
     currVal = _Patterns[patIdx].Muted
 
     print('MuteMixerTrack: ', _Patterns[patIdx].Muted, newVal, trk, patIdx)
@@ -268,8 +268,8 @@ def MuteMixerTrack(trk, newVal = -1):
             newVal = 0
 
     _Patterns[patIdx].Muted = newVal
-    mixer.muteTrack(trk, newVal) #explicit set
-    MutePlaylistTrack(patIdx, newVal )
+    #mixer.muteTrack(trk, newVal) #explicit set
+    MutePlaylistTrack(pat.FLIndex, newVal )
     
     print('MuteMixerTrack: ', _Patterns[patIdx].Muted, newVal, trk, _Patterns[patIdx].Mixer.FLIndex)
     #print('MuteMixerTrack', trk, _Patterns[patIdx].FLIndex, 'M:', newVal, currVal)
@@ -439,7 +439,7 @@ def OnMidiMsg(fire, event):
             if (event.midiId == MIDI_NOTEON):
                 print('MidiMsg.PadOn=', PadIndex)
                 
-                if (_RepeatNote) and (not _IsRepeating) and (False):
+                if (_RepeatNote) and (not _IsRepeating):
                     print('repeating...')
                     _IsRepeating = True
                     tempo = mixer.getCurrentTempo(0) / 1000
@@ -450,13 +450,15 @@ def OnMidiMsg(fire, event):
                     halfstep = 7.5/tempo * 1000
                     print(tempo, beat, halfbeat, step, halfstep)
                     device.repeatMidiEvent(event, 0, int(step) )
+                    #wasHandled = True
             
             if (event.midiId == MIDI_NOTEOFF):
                 print('MidiMsg.PadOff=', PadIndex)
-                if (_RepeatNote) and (False):
+                if (_RepeatNote):
                     print('repeat...stop')
                     device.stopRepeatMidiEvent()
                     _IsRepeating = False 
+                    wasHandled = True
                 
             event.handled = wasHandled
 
@@ -508,8 +510,7 @@ def RefreshPatternPads(fire):
         nfxPat = _Patterns[patIdx] 
         pad = PatternPads[patIdx] # pad index
         color = PatternColors[patIdx] # color index
-        mixer = nfxPat.Mixer #get mixer for track
-        #print('Pad:', pad, 'Pattern:', nfxPat.Name, nfxPat.Mixer.Name, nfxPat.Muted)
+
         if(_selectedPattern == trk):
             nfxSetFIRELEDCol(fire, pad, color ,0)
         else:
@@ -572,9 +573,9 @@ def RefreshFPCPads(fire):
             nfxSetFIRELEDCol(fire, p, FPC_BPadColors[FPC_BPads.index(p)],2)
     else:
         for p in FPC_APads:
-            nfxSetFIRELEDCol(fire, p, cDimWhite, 0)
+            nfxSetFIRELEDCol(fire, p, cOff, 0)
         for p in FPC_BPads:
-            nfxSetFIRELEDCol(fire, p, cDimWhite, 0)
+            nfxSetFIRELEDCol(fire, p, cOff, 0)
 
 def RefreshChannelPads(fire):
     global LoopSizes

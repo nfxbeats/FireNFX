@@ -944,7 +944,7 @@ class TFire():
             if self.CurrentDrumMode in [DrumModeFPC, DrumModeFPCCenter]:
                 if (self.CurrentDrumMode == DrumModeFPC):
                     Data1 += 4 # offset to match center layout
-                print('nfx', Data1)
+                #print('nfx', Data1)
                 Data1 = self.GetFPCNoteValue(Data1)
             elif self.CurrentDrumMode == DrumModeSlicex:
                 Data1 = self.GetSlicexNoteValue(Data1)
