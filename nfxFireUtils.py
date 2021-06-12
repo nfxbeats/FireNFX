@@ -56,6 +56,7 @@ class TnfxPattern:
         self.Muted = 0
         self.ShowChannelEditor = 0
         self.ShowPianoRoll = 0
+        self.ShowChannelSettings = 0
 
 class TnfxPadMap:
     def __init__(self):
@@ -96,6 +97,18 @@ PatternFLColors = [cYellow, cFLOrange, cMagenta, cFLGreen, cFLRed, cFLCyan, cFLP
 
 # these go under the  PatternPads
 ChannelPads = [24, 25, 26, 27, 28, 29, 30 , 31]
+#value of below relate to index of above
+_cpPatLen0 = 0
+_cpPatLen1 = 1
+_cpPatLen2 = 2
+_cpPatLen3 = 3
+_cpMute = 4
+_cpShowCE = 5
+_cpShowPR = 6
+_cpShowCS = 7
+_lsLen1 = 32
+_lsLen2 = 64
+_lsLen3 = 96
 
 MacroPads = [40, 41, 42, 43, 44, 45, 46, 47]
 MacroColors = [cGreen,     cMagenta, cOrange, cOff, cRed,        cYellow,        cOff, cOrange]
@@ -115,7 +128,7 @@ FPC_BPads = [4, 5, 6, 7,
              36, 37, 38, 39, 
              52, 53, 54, 55]
 
-FPC_APadColors = [cPurple, cPurple, cPurple, cYellow,
+FPC_APadColors = [cPurple, cPurple, cYellow, cYellow,
                   cRed, cRed, cYellow, cYellow,
                   cRed, cRed, cRed, cRed,
                   cBlue, cBlue, cBlue, cBlue]
@@ -123,6 +136,17 @@ FPC_BPadColors = [cGreen, cGreen, cGreen, cGreen,
                   cCyan, cCyan, cCyan, cCyan,
                   cSilver, cSilver, cSilver, cSilver,
                   cOrange, cOrange, cOrange, cOrange]  
+
+
+_PAD_Notes = [52, 53, 54, 55, 56, 57, 58, 59, 
+              36, 37, 38, 39, 40, 41, 42, 43, 
+              20, 21, 22, 23, 24, 25, 26, 27,
+               4,  5,  6,  7,  8,  9, 10, 11, -1]
+
+_FPC_Notes = [37, 36, 42, 54, 60, 61, 62, 63, 
+              40, 38, 46, 44, 64, 65, 66, 67, 
+              48, 47, 45, 43, 68, 69, 70, 71, 
+              49, 55, 51, 53, 72, 73, 74, 75, -1]
 
 #endregion
 
@@ -289,6 +313,14 @@ def MutePlaylistTrack(pltrk, newVal = -1):
     print('MutePLTrack', pltrk, newVal)
     if(currVal != newVal):
         playlist.muteTrack(pltrk) #explicit set
+    
+    # the following lines will force FL to 'refresh' the 
+    # playlist and thus it will cut or start the notes better.
+    # unfortunately it takes longer because it sets the pattern twice
+    patterns.jumpToPattern(-1)
+    patterns.jumpToPattern(pltrk)
+    
+
 
 def getPadMapFromPadNum(padnum):
     return _PadMaps[padnum]
@@ -353,6 +385,26 @@ def ShowPianoRoll(showVal):
 
     print('ShowPR: ', _Patterns[selPatIdx].ShowPianoRoll)
 
+def ShowChannelSettings(showVal):
+    global _Patterns
+    selPatIdx = _selectedPattern-1 # 0 based
+    selPat = _Patterns[selPatIdx] #0 based 
+    currVal = selPat.ShowChannelSettings
+
+
+    if(showVal==-1): #toggle
+        if(currVal==0):
+            showVal = 1
+        else:
+            showVal = 0
+
+    print('ShowCS: ', _Patterns[selPatIdx].ShowChannelSettings)
+    ui.showWindow(device_Fire.widChannelRack)
+    chanNum = channels.selectedChannel(0,0,1)
+    channels.showCSForm(chanNum, showVal)
+    _Patterns[selPatIdx].ShowChannelSettings = showVal
+    print('ShowCS: ', _Patterns[selPatIdx].ShowChannelSettings)
+
 
 def ShowChannelEditor(showVal):
     global _Patterns
@@ -395,6 +447,9 @@ def OnIdle(fire):
     RefreshProgress(fire)
     RefreshFPCPads(fire)
 
+    if(_RepeatNote):
+        RefreshMacroPads
+
     refresh = False
     
     #force refresh on mode change
@@ -423,7 +478,8 @@ def OnIdle(fire):
 def OnMidiMsg(fire, event):
     global _IsRepeating
     global _RepeatNote
-    #print("nfxOnMidiMsg", event.data1)
+    origevent = event
+    print("nfxOnMidiMsg", event.data1, event.midiId)
     #RefreshFirePads(fire, False)
     wasHandled = False
     Update_Fire(fire)
@@ -436,36 +492,29 @@ def OnMidiMsg(fire, event):
             
             PadIndex = event.data1
 
-            if (event.midiId == MIDI_NOTEON):
-                print('MidiMsg.PadOn=', PadIndex)
-                
-                if (_RepeatNote) and (not _IsRepeating):
-                    print('repeating...')
-                    _IsRepeating = True
-                    tempo = mixer.getCurrentTempo(0) / 1000
-
-                    beat = 60/tempo * 1000
-                    halfbeat = 30/tempo * 1000
-                    step = 15/tempo * 1000
-                    halfstep = 7.5/tempo * 1000
-                    print(tempo, beat, halfbeat, step, halfstep)
-                    device.repeatMidiEvent(event, 0, int(step) )
-                    #wasHandled = True
+            #if (event.midiId == MIDI_NOTEON):
+                #print('MidiMsg.PadOn=', PadIndex)
             
-            if (event.midiId == MIDI_NOTEOFF):
-                print('MidiMsg.PadOff=', PadIndex)
-                if (_RepeatNote):
-                    print('repeat...stop')
-                    device.stopRepeatMidiEvent()
-                    _IsRepeating = False 
-                    wasHandled = True
+            #if (event.midiId == MIDI_NOTEOFF):
+                #print('MidiMsg.PadOff=', PadIndex)
                 
             event.handled = wasHandled
 
     #ShowMacroButtons(fire, False)
 
 #endregion
-    
+
+def GetTempoDiv(div):
+    tempo = mixer.getCurrentTempo(0) / 1000
+    beat = 60/tempo * 1000
+    halfbeat = 30/tempo * 1000
+    step = 15/tempo * 1000
+    halfstep = 7.5/tempo * 1000
+    divs = [beat, halfbeat, step, halfstep]
+    return divs[div]
+
+
+
 #region Refresh
 def RefreshProgress(fire):
     if not isAllowed():
@@ -512,9 +561,9 @@ def RefreshPatternPads(fire):
         color = PatternColors[patIdx] # color index
 
         if(_selectedPattern == trk):
-            nfxSetFIRELEDCol(fire, pad, color ,0)
+            nfxSetFIRELEDCol(fire, pad, color ,_subpattern)
         else:
-            nfxSetFIRELEDCol(fire, pad, color, 2)
+            nfxSetFIRELEDCol(fire, pad, color, 3)
 
         #if (not fire.CurrentKnobsMode in [] != device_Fire.KnobsModeMixer:
         if(nfxPat.Muted == 1):
@@ -583,10 +632,8 @@ def RefreshChannelPads(fire):
     if not isAllowed():
         return
         
-
     #print("RefreshChannelPads")
     selPat = getSelPat()
-    #isMixerMode = MixerMode() #fire.CurrentKnobsMode == device_Fire.KnobsModeMixer
 
     for padNum in ChannelPads:
         trkIdx = ChannelPads.index(padNum) # gets the 'track' index (0..7), should align with PatterPads
@@ -602,6 +649,7 @@ def RefreshChannelPads(fire):
                 selPat = getSelPat()
                 # determine the color to use 
                 flcol = patterns.getPatternColor(selPat.FLIndex) & 0xFFFFFF
+
                 if(flcol in PatternFLColors):
                     col = PatternColors[PatternFLColors.index(flcol) ]
                 else:
@@ -612,27 +660,31 @@ def RefreshChannelPads(fire):
                 nfxSetFIRELEDCol(fire, padNum, col, 2)
 
                 # set loop size indicator with no dim factor
-                if(loopsize == 16):
-                    nfxSetFIRELEDCol(fire,  ChannelPads[1], col, 0)
-                if(loopsize == 32):
-                    nfxSetFIRELEDCol(fire, ChannelPads[2], col, 0)
-                if(loopsize == 64):
-                    nfxSetFIRELEDCol(fire, ChannelPads[3], col, 0)
+                if(loopsize == _lsLen1 ):
+                    nfxSetFIRELEDCol(fire,  ChannelPads[_cpPatLen1], col, 0)
+                if(loopsize == _lsLen2):
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpPatLen2], col, 0)
+                if(loopsize == _lsLen3):
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpPatLen3], col, 0)
 
                 if (selPat.Muted):
-                    nfxSetFIRELEDCol(fire, ChannelPads[4], col, 4)
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpMute], col, 4)
 
                 if(selPat.ShowChannelEditor == 0):
-                    nfxSetFIRELEDCol(fire, ChannelPads[5], col, 4)
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpShowCE], col, 4)
                 else:
-                    nfxSetFIRELEDCol(fire, ChannelPads[5], col, 2)
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpShowCE], col, 2)
 
 
                 if(selPat.ShowPianoRoll == 0):
-                    nfxSetFIRELEDCol(fire, ChannelPads[6], col, 4)
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpShowPR], col, 4)
                 else:
-                    nfxSetFIRELEDCol(fire, ChannelPads[6], col, 2)
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpShowPR], col, 2)
 
+                if(selPat.ShowChannelSettings == 0):
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpShowCS], col, 4)
+                else:
+                    nfxSetFIRELEDCol(fire, ChannelPads[_cpShowCS], col, 2)
 
         else: # mixer mode
             # set channel pattern color - second row
@@ -655,6 +707,15 @@ def RefreshMacroPads(fire):
         macIdx = MacroPads.index(macPad)
         macCol = MacroColors[macIdx]
         nfxSetFIRELEDCol(fire, macPad, macCol, 2)
+
+        if(macIdx == 2): # special case for repeat button
+            if(_RepeatNote):
+                if _nfxBlinkTimer < _nfxBlinkSpeed:
+                    nfxSetFIRELEDCol(fire, macPad, cWhite, 0)        
+                else:
+                    nfxSetFIRELEDCol(fire, macPad, macCol, 0)
+        
+
 #endregion
 
 #region Pad Handlers
@@ -664,11 +725,49 @@ def HandleControlPress(fire, event):
     Update_Fire(fire)     
     RefreshFirePads(fire, False)
 
+def HandleFPCPress(fire, event, m):
+    global _RepeatNote
+    global _IsRepeating
+    wasHandled = False
+    chan = channels.channelNumber()
+    print("---------------------------")
+    print('HandleFPCPress', event.data1, event.data2, m)
+    padIdx = event.data1 # +4 from 0 based pads I normally refer to....
+    
+    note = m 
+    
+    if(_showFPCColors):
+        note = m
+    
+    vel = event.data2
+    tdiv = 3
+    fpcNoteIdx = _FPC_Notes.index(note)
+    padNoteVal = _PAD_Notes[fpcNoteIdx] + device_Fire.PadFirst - 4 # -4 is the FPC offset
+
+    
+    if event.midiId == MIDI_NOTEON:
+        print('FPC', event.data1, 'Note', note, 'ON', _RepeatNote, int(GetTempoDiv(tdiv)))
+        channels.midiNoteOn(chan, note, vel)
+        event.data1 = padNoteVal
+        if(_RepeatNote) and (not _IsRepeating):
+            _IsRepeating = True 
+            #print('-----------> Note', note, 'NewNote', padNoteVal)
+            device.repeatMidiEvent(event, 0, int(GetTempoDiv(tdiv)) )        
+            event.handled = True 
+    else:
+        print('FPC', event.data1, 'OFF', _RepeatNote)
+        channels.midiNoteOn(chan, note, 0)
+        if(_RepeatNote) and (_IsRepeating):
+            _IsRepeating = False 
+            device.stopRepeatMidiEvent()
+    print("---------------------------")
+    return True #wasHandled  
+
 # needs to be called from OnMidiMsg NOTE ON /OFF section of device_Fire
 def HandlePadPress(fire, event):
     global _lastEvent
     global _PadMaps
-    #print('HandlePadPress', event.data1, event.data2)
+    print('HandlePadPress', event.data1, event.data2)
     Update_Fire(fire)     
     _lastEvent.status = event.status
 
@@ -721,36 +820,40 @@ def HandleChannelPads(fire, PadIndex):
     else: # channel mode uses selected
 
         #region loop size
-        if (chanPadIdx == 0):
+        if (chanPadIdx == _cpPatLen0):
             loopsize = 0
-        if (chanPadIdx == 1):
-            loopsize = 16
-        if (chanPadIdx == 2):
-            loopsize = 32
-        if (chanPadIdx == 3):
-            loopsize = 64
+        if (chanPadIdx == _cpPatLen1):
+            loopsize = _lsLen1
+        if (chanPadIdx == _cpPatLen2):
+            loopsize = _lsLen2
+        if (chanPadIdx == _cpPatLen3):
+            loopsize = _lsLen3
         if(loopsize > -1):
             fire.DisplayTimedText('Pat Loop: ' + str(loopsize) )
             patterns.setChannelLoop(selPat.Channel.FLIndex, loopsize)
             selPat.Channel.LoopSize = loopsize
+            #patterns.selectPattern(selPat.FLIndex, 0, 1)
         #endregion
 
-        if(chanPadIdx == 4): # mute channel
+        if(chanPadIdx == _cpMute): # mute channel
             trk = selPat.Mixer.FLIndex
             MuteMixerTrack(trk, -1)
         
-        if(chanPadIdx == 5): # toggle generator
+        if(chanPadIdx == _cpShowCE): # toggle generator
             ShowChannelEditor(-1)
-            #print('show gen', ui.getFocusedPluginName() )
+             #print('show gen', ui.getFocusedPluginName() )
         
-        if(chanPadIdx == 6): # toggle piano roll
-            #print('show pr = not', selPat.ShowPianoRoll )
+        if(chanPadIdx == _cpShowPR): # toggle piano roll
             ShowPianoRoll(-1)
+            
+        if(chanPadIdx == _cpShowCS): # toggle ChannelSettings
+            ShowChannelSettings(-1)
             
 
 def HandleMacros(fire, event, PadIndex):
     global _PadMaps
     global _RepeatNote
+    global _IsRepeating
 
     # check if a macro pad is pressed
     if PadIndex in MacroPads:
@@ -768,8 +871,11 @@ def HandleMacros(fire, event, PadIndex):
         if MacroIndex == 1:
             UndoPattern()
         if MacroIndex == 2:
-            print('repeat mode')
             _RepeatNote = not _RepeatNote
+            print('repeat mode', _RepeatNote)
+            if(not _RepeatNote):
+                device.stopRepeatMidiEvent()
+                _IsRepeating = False 
         if MacroIndex == 3:
             print("unused")
         if MacroIndex == 4:

@@ -629,7 +629,7 @@ class TFire():
         return max(0, min(Result, 127))
 
     def GetFPCNoteValue(self, Data1):
-
+        
         # convert to FPC notes
         if Data1 ==52:
             Result = 37 # C#3
@@ -697,6 +697,8 @@ class TFire():
             Result = 75 # E6
         else:
             Result = -1
+        #print('conv', Data1, Result)
+
         return Result
 
     def GetDualKeybBlackNoteVal(self, x, y):
@@ -914,7 +916,6 @@ class TFire():
 
         Data1 = event.data1
         Data2 = 0
-
         Result = True
         if (Data1 >= PadFirst) & (Data1 <= PadLast):
             Data1 -= PadFirst
@@ -942,10 +943,19 @@ class TFire():
                         return Result
         elif self.CurrentMode == ModeDrum:
             if self.CurrentDrumMode in [DrumModeFPC, DrumModeFPCCenter]:
+                #nfx - here we can get the raw pad number before the offset and translation
+                nfxOrig = event 
+
                 if (self.CurrentDrumMode == DrumModeFPC):
                     Data1 += 4 # offset to match center layout
-                #print('nfx', Data1)
+                
+                nfxOffset = Data1 
+
                 Data1 = self.GetFPCNoteValue(Data1)
+
+                print('device_Fire->TranslateNote:   OrigData1', nfxOrig.data1, 'Offset', nfxOffset, 'New', Data1) #nfx
+
+
             elif self.CurrentDrumMode == DrumModeSlicex:
                 Data1 = self.GetSlicexNoteValue(Data1)
             elif self.CurrentDrumMode == DrumModeOmni:
@@ -1540,15 +1550,17 @@ class TFire():
                                 
                                 if (self.CurrentDrumMode == DrumModeFPC):
                                     event.data1 += 4 # offset to match center layout
+
                                 m = self.GetFPCNoteValue(event.data1)
 
                                 if m >= 0:
+                                    nfxRes = nfxFireUtils.HandleFPCPress(self, event, m) #NFX
                                     event.data1 = m
                                     if event.midiId == MIDI_NOTEON:
                                         self.PlayingNotes.append(event.data1)
                                     else:
                                         self.PlayingNotes.remove(event.data1)
-                                    event.handled = False
+                                    event.handled = nfxRes # was False #NFX
                                     return
                                 else:
                                     #print('nfx')
@@ -2039,10 +2051,6 @@ class TFire():
 
             event.handled = True
         
-        
-
-        
-
     def ScaleColor(self, ScaleValue, h, s, v):
 
         s = min(1.0, (s * 2) * (self.FLFirePadSaturation / 128))
