@@ -13,9 +13,10 @@ import device
 import ui
 import transport
 import general
-#import midi
 from midi import *
 widPlugin = 5  #missing from midi.py
+from harmonicScales import *
+import utils 
 
 import channels
 import mixer
@@ -57,6 +58,7 @@ class TnfxPattern:
         self.ShowChannelEditor = 0
         self.ShowPianoRoll = 0
         self.ShowChannelSettings = 0
+        self.Color = cOff 
 
 class TnfxPadMap:
     def __init__(self):
@@ -72,6 +74,7 @@ class TnfxPadMap:
         self.Color = 0x000000       # the color that looks right on Fire
         self.FLColor = 0x000000     # the color that looks like above color best in FL
         self.MIDINote = -1          # the midi Note for this pad
+        self.IsRootNote = False 
 
 class TnfxMacro:
     def __init__(self):
@@ -111,23 +114,28 @@ _lsLen2 = 64
 _lsLen3 = 96
 
 MacroPads = [40, 41, 42, 43, 44, 45, 46, 47]
-MacroColors = [cGreen,     cMagenta, cOrange, cOff, cRed,        cYellow,        cOff, cOrange]
-MacroNames = ['Save Undo', 'Undo',   'Repeat', '', 'Clear MIDI', 'Reset UI/ALL', '', 'Re-INIT']
+MacroColors = [cGreen,     cMagenta, cOrange, cOff, cRed,        cYellow,        cCyan, cOrange]
+MacroNames = ['Save Undo', 'Undo',   'Repeat', '', 'Clear MIDI', 'Reset UI/ALL', 'TEST', 'Re-INIT']
 
 ProgressPads = [60, 61, 62, 63]
 ProgressPadsDim = cDimWhite
 ProgressPadsOn = cWhite 
 
+#note these are referenced via the AKAI PadIndex (0..63)
+# and NOT the FPC Pad num. AKAI runs top left to bottom right
+# whereas FPC runs bottom left to top right
 FPC_APads = [0,1,2,3,
              16, 17, 18, 19,
              32, 33, 34, 35,
              48, 49, 50 , 51]
-
 FPC_BPads = [4, 5, 6, 7,
              20, 21, 22, 23,
              36, 37, 38, 39, 
              52, 53, 54, 55]
 
+             
+
+# color scheme for my default kit
 FPC_APadColors = [cPurple, cPurple, cYellow, cYellow,
                   cRed, cRed, cYellow, cYellow,
                   cRed, cRed, cRed, cRed,
@@ -137,12 +145,12 @@ FPC_BPadColors = [cGreen, cGreen, cGreen, cGreen,
                   cSilver, cSilver, cSilver, cSilver,
                   cOrange, cOrange, cOrange, cOrange]  
 
-
+# used to unencode the translation, so when we repeat not it sends the untralslated value
+# if I didnt do this, the note would get re-translated into the wrong note.
 _PAD_Notes = [52, 53, 54, 55, 56, 57, 58, 59, 
               36, 37, 38, 39, 40, 41, 42, 43, 
               20, 21, 22, 23, 24, 25, 26, 27,
                4,  5,  6,  7,  8,  9, 10, 11, -1]
-
 _FPC_Notes = [37, 36, 42, 54, 60, 61, 62, 63, 
               40, 38, 46, 44, 64, 65, 66, 67, 
               48, 47, 45, 43, 68, 69, 70, 71, 
@@ -229,6 +237,7 @@ def BuildPatterns():
         trk = getMixerTrackForPattern(patnum)
         newPat.Channel = next(x for x in _Channels if x.FLIndex == chan) # next gets single element
         newPat.Mixer = next(x for x in _Mixers if x.FLIndex == trk) # next gets single element
+        newPat.Color = getColorFromFL(patterns.getPatternColor(patnum))
         if(newPat.Name == "Drums"):
             _drumMixerTrk = trk
         _Patterns.append(newPat)
@@ -406,6 +415,8 @@ def ShowChannelSettings(showVal):
     print('ShowCS: ', _Patterns[selPatIdx].ShowChannelSettings)
 
 
+
+
 def ShowChannelEditor(showVal):
     global _Patterns
     selPatIdx = _selectedPattern-1 # 0 based
@@ -424,7 +435,17 @@ def ShowChannelEditor(showVal):
     channels.showEditor(chanNum, showVal)
     _Patterns[selPatIdx].ShowChannelEditor = showVal
     print('ShowCE: ', _Patterns[selPatIdx].ShowChannelEditor)
-  
+
+def getColorFromFL(FLColor):
+    #FLColor = channels.getChannelColor(n)
+    h, s, v = utils.RGBToHSVColor(FLColor)
+    FLColor, h, s, v = _Fire.ScaleColor(1.0, h, s, v)
+    r = ((FLColor >> 16) & 0xFF) // 2
+    b = (FLColor & 0xFF) // 2
+    g = ((FLColor >> 8) & 0xFF) // 2
+    return utils.RGBToColor(r, g, b)
+
+
 #endregion
 
 #region FL MIDI Events
@@ -439,7 +460,7 @@ def OnInit(fire):
 # called from TFire.OnIdle
 def OnIdle(fire):
     global _nfxBlinkTimer
-    global nfxUpdateTimer
+    #OBS global nfxUpdateTimer
     global _lastKnobMode
     global _lastPattern 
 
@@ -471,6 +492,7 @@ def OnIdle(fire):
         RefreshFirePads(fire, False) 
         
     _nfxBlinkTimer += 1
+    _nfxBlinkSpeed = GetTempoDiv(2)
     if _nfxBlinkTimer >= _nfxBlinkSpeed * 6:
         _nfxBlinkTimer = 0
 
@@ -479,7 +501,7 @@ def OnMidiMsg(fire, event):
     global _IsRepeating
     global _RepeatNote
     origevent = event
-    print("nfxOnMidiMsg", event.data1, event.midiId)
+    #print("nfxOnMidiMsg", event.data1, event.midiId)
     #RefreshFirePads(fire, False)
     wasHandled = False
     Update_Fire(fire)
@@ -558,7 +580,8 @@ def RefreshPatternPads(fire):
         patIdx = trk - 1 # 0 based
         nfxPat = _Patterns[patIdx] 
         pad = PatternPads[patIdx] # pad index
-        color = PatternColors[patIdx] # color index
+        #color = PatternColors[patIdx] # color index
+        color = nfxPat.Color
 
         if(_selectedPattern == trk):
             nfxSetFIRELEDCol(fire, pad, color ,_subpattern)
@@ -622,9 +645,17 @@ def RefreshFPCPads(fire):
             nfxSetFIRELEDCol(fire, p, FPC_BPadColors[FPC_BPads.index(p)],2)
     else:
         for p in FPC_APads:
-            nfxSetFIRELEDCol(fire, p, cOff, 0)
+            if(_PadMaps[p].IsRootNote):
+                col = cWhite
+            else:
+                col = cDimWhite
+            nfxSetFIRELEDCol(fire, p, col, 0)
         for p in FPC_BPads:
-            nfxSetFIRELEDCol(fire, p, cOff, 0)
+            if(_PadMaps[p].IsRootNote):
+                col = cWhite
+            else:
+                col = cDimWhite
+            nfxSetFIRELEDCol(fire, p, col, 0)
 
 def RefreshChannelPads(fire):
     global LoopSizes
@@ -694,7 +725,26 @@ def RefreshChannelPads(fire):
                 nfxSetFIRELEDCol(fire, padNum, cDimWhite, 0)  
             
             
-            
+def GetScaleGrid(rootNote = 0, startOctave = 2, scale = HARMONICSCALE_MINORPENTATONIC):
+    global _PadMaps
+    #get lowest octave line
+    lineGrid = [[0] for y in range(8)]    
+    notesInScale = GetScaleNoteCount(scale)    
+    BuildNoteGrid(lineGrid, 8, 1, rootNote, startOctave, scale)
+    for colOffset in range(0,8):
+        for row in range(0,4):
+            noteVal = lineGrid[colOffset][0] + (12*row)
+            revRow = 3-row # reverse to go from bottom to top
+            rowOffset = 16 * revRow # 0,16,32,48
+            padIdx = rowOffset + colOffset
+            #print('...MIDI Note mapping:','row', row, revRow, 'col', colOffset, 'padIdx', padIdx, 
+            #'note', noteVal, 'pMap.Note', _PadMaps[padIdx].MIDINote)
+            _PadMaps[padIdx].MIDINote = noteVal
+            _PadMaps[padIdx].IsRootNote = (colOffset == 0) or (colOffset == notesInScale) 
+            print('...pMap.MIDINote', _PadMaps[padIdx].MIDINote, _PadMaps[padIdx].IsRootNote)            
+    
+    
+
 
                   
 
@@ -730,29 +780,34 @@ def HandleFPCPress(fire, event, m):
     global _IsRepeating
     wasHandled = False
     chan = channels.channelNumber()
-    print("---------------------------")
-    print('HandleFPCPress', event.data1, event.data2, m)
-    padIdx = event.data1 # +4 from 0 based pads I normally refer to....
-    
-    note = m 
-    
-    if(_showFPCColors):
-        note = m
-    
+    #print("---------------------------")
+    #print('HandleFPCPress', event.data1, event.data2, m)
+    padIdx = event.data1-4 # +4 from 0 based pads I normally refer to....
+    note = _PadMaps[padIdx].MIDINote
     vel = event.data2
     tdiv = 3
-    fpcNoteIdx = _FPC_Notes.index(note)
-    padNoteVal = _PAD_Notes[fpcNoteIdx] + device_Fire.PadFirst - 4 # -4 is the FPC offset
-
+    rptTime = int(GetTempoDiv(tdiv))
     
+    
+    if(_showFPCColors):
+        note = m 
+        fpcNoteIdx = _FPC_Notes.index(note)
+        padNoteVal = _PAD_Notes[fpcNoteIdx] + device_Fire.PadFirst - 4 # -4 is the FPC offset
+    else:
+        padNoteVal = note
+
     if event.midiId == MIDI_NOTEON:
-        print('FPC', event.data1, 'Note', note, 'ON', _RepeatNote, int(GetTempoDiv(tdiv)))
+
+        #print('.......FPC', event.data1, 'PadIdx', padIdx,'m', m,  'Note', note, 
+        #   'MIDINote', _PadMaps[padIdx].MIDINote, 'RPT:', _RepeatNote, rptTime)
+
         channels.midiNoteOn(chan, note, vel)
-        event.data1 = padNoteVal
+
         if(_RepeatNote) and (not _IsRepeating):
             _IsRepeating = True 
             #print('-----------> Note', note, 'NewNote', padNoteVal)
-            device.repeatMidiEvent(event, 0, int(GetTempoDiv(tdiv)) )        
+            event.data1 = padNoteVal
+            device.repeatMidiEvent(event, rptTime, rptTime)        
             event.handled = True 
     else:
         print('FPC', event.data1, 'OFF', _RepeatNote)
@@ -760,7 +815,8 @@ def HandleFPCPress(fire, event, m):
         if(_RepeatNote) and (_IsRepeating):
             _IsRepeating = False 
             device.stopRepeatMidiEvent()
-    print("---------------------------")
+    
+    #print("---------------------------")
     return True #wasHandled  
 
 # needs to be called from OnMidiMsg NOTE ON /OFF section of device_Fire
@@ -813,7 +869,7 @@ def HandleChannelPads(fire, PadIndex):
     trkNum = nfxPat.Mixer.FLIndex 
     loopsize = selPat.Channel.LoopSize 
 
-    print('...ChannelPad:', chanPadIdx, nfxPat.Muted, '..MixPattern:', nfxPat.Name, '..SelPattern:' + selPat.Name, loopsize, selPat.Muted )
+    #print('...ChannelPad:', chanPadIdx, nfxPat.Muted, '..MixPattern:', nfxPat.Name, '..SelPattern:' + selPat.Name, loopsize, selPat.Muted )
 
     if(isModeMixer()):
         MuteMixerTrack(trkNum, -1)        
@@ -887,7 +943,7 @@ def HandleMacros(fire, event, PadIndex):
             else:
                 ResetUI(fire)
         if MacroIndex == 6:
-            print("unused")
+            GetScaleGrid(0, 2, HARMONICSCALE_BLUES)
         if MacroIndex == 7:
             if(fire.AltHeld):
                 OnInit(fire)
@@ -987,7 +1043,7 @@ def Animate():
 
 def ResetPadMaps():
     global _PadMaps
-    #print('ResetPadMaps')
+    print('...Reset PadMaps')
     # map the pads
     patidx = -1
     _PadMaps.clear()
@@ -995,6 +1051,15 @@ def ResetPadMaps():
     for padNum in range(0, 64): # the pads
         pMap = TnfxPadMap()
         pMap.FirePadIndex = padNum
+        pMap.MIDINote = -1
+
+        if(padNum in FPC_APads):
+            pMap.Name = 'FPC-A'
+            pMap.MIDINote = -1
+
+        if(padNum in FPC_BPads):
+            pMap.Name = 'FPC-B'
+            pMap.MIDINote = -1
 
         #iterates the FIRE pads defined for patterns - top row
         if padNum in PatternPads:
@@ -1017,10 +1082,11 @@ def ResetPadMaps():
             macIdx = MacroPads.index(padNum)    # get the Macro Index
             pMap.FireMacroIndex = macIdx
             pMap.Color = MacroColors[macIdx]
-            
+
+        _PadMaps.append(pMap)
 
         if(len(pMap.Name) > 1 ):
-            print('......Pad Mapped: ', pMap.FirePadIndex, pMap.Mixer.Name, pMap.PatternIndex)
+            print('......Pad Mapped: ', pMap.Name, pMap.FirePadIndex, pMap.MIDINote)
 
 def Update_Fire(fire):
     global _Fire
@@ -1073,16 +1139,16 @@ def ClearMidi(fire):
     if(isRec):
         transport.record() 
     
-    time.sleep(0.2)
+    #time.sleep(0.2)
     _isClearing = False
 
 def ClearPattern():
     #selPat = getSelPat()
     #channels.selectChannel(selPat.Channel.FLIndex)
     ui.showWindow(widChannelRack)
-    time.sleep(0.25)
+    #(0.25)
     ui.cut()
-    time.sleep(0.25)
+    #time.sleep(0.25)
 
 def SaveUndo():
     _Fire.DisplayTimedText("Save Undo")

@@ -42,7 +42,7 @@ def IsNoteInScale(note, scale):
     c = GetScaleNoteCount(scale)
     for n in range(0, c + 1):
         if (note % 12) == HarmonicScaleList[scale][ n]:
-            return true
+            return True
     return False
 
 def IsRootNote(note, scale, offset):

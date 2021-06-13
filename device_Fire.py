@@ -953,7 +953,7 @@ class TFire():
 
                 Data1 = self.GetFPCNoteValue(Data1)
 
-                print('device_Fire->TranslateNote:   OrigData1', nfxOrig.data1, 'Offset', nfxOffset, 'New', Data1) #nfx
+                #print('device_Fire->TranslateNote:   OrigData1', nfxOrig.data1, 'Offset', nfxOffset, 'New', Data1) #nfx
 
 
             elif self.CurrentDrumMode == DrumModeSlicex:
