@@ -7,6 +7,9 @@
 #    to
 #  The folder with this code.
 
+# yes this code is messy and redundant on places. its in a constant state of refactor
+# and development. 
+
 #region imports
 import time
 import device
@@ -89,14 +92,8 @@ class TnfxMacro:
 
 #pads to display the plalist patterns - top row
 PatternPads = [8, 9, 10, 11, 12, 13, 14, 15]
-
 # FL Patterns to associate with the above pads
 PatternChannels = [1,2,3,4,5,6,7,8]
-
-#default colors for the patterns row
-PatternColors = [cYellow, cOrange, cMagenta, cGreen, cRed, cCyan, cPurple, cBlue]
-#fl specific colors for coloring the patterns in FL.. mapped to PatternColors
-PatternFLColors = [cYellow, cFLOrange, cMagenta, cFLGreen, cFLRed, cFLCyan, cFLPurple, cFLBlue ]
 
 # these go under the  PatternPads
 ChannelPads = [24, 25, 26, 27, 28, 29, 30 , 31]
@@ -114,10 +111,10 @@ _lsLen2 = 64
 _lsLen3 = 96
 
 MacroPads = [40, 41, 42, 43, 44, 45, 46, 47]
-MacroColors = [cGreen,     cMagenta, cOrange, cOff, cRed,        cYellow,        cCyan, cOrange]
-MacroNames = ['Save Undo', 'Undo',   'Repeat', '', 'Clear MIDI', 'Reset UI/ALL', 'TEST', 'Re-INIT']
+MacroColors = [cGreen,     cMagenta, cOrange, cBlue, cRed,        cYellow,        cCyan, cOrange]
+MacroNames = ['Save Undo', 'Undo',   'Repeat', 'Snap', 'Clear MIDI', 'Reset UI/ALL', 'TEST', 'Re-INIT']
 
-ProgressPads = [60, 61, 62, 63]
+ProgressPads = [56, 57, 58, 59, 60, 61, 62, 63]
 ProgressPadsDim = cDimWhite
 ProgressPadsOn = cWhite 
 
@@ -144,7 +141,6 @@ FPC_BPadColors = [cGreen, cGreen, cGreen, cGreen,
                   cCyan, cCyan, cCyan, cCyan,
                   cSilver, cSilver, cSilver, cSilver,
                   cOrange, cOrange, cOrange, cOrange]  
-
 # used to unencode the translation, so when we repeat not it sends the untralslated value
 # if I didnt do this, the note would get re-translated into the wrong note.
 _PAD_Notes = [52, 53, 54, 55, 56, 57, 58, 59, 
@@ -156,6 +152,13 @@ _FPC_Notes = [37, 36, 42, 54, 60, 61, 62, 63,
               48, 47, 45, 43, 68, 69, 70, 71, 
               49, 55, 51, 53, 72, 73, 74, 75, -1]
 
+
+# snap defs are in MIDI.py aka Snap_Cell, Snap_line, etc
+_snapModes = ["Default", "Line", "?", "Cell", "None", 
+    "1/6 Step", "1/4 Step", "1/3 Step", "1/2 Step", "Step", 
+    "1/6 Beat", "1/4 Beat", "1/3 Beat", "1/2 Beat", "Beat", 
+    "Bar"]
+ 
 #endregion
 
 #region Globals
@@ -172,6 +175,7 @@ _lastKnobMode = -1
 _lastPattern = -1
 _RepeatNote = False
 _IsRepeating = False
+_IsActivating = False 
 #lists of things
 _Macros = list()
 _PadMaps = list() 
@@ -179,6 +183,7 @@ _Patterns = list()
 _Channels = list()
 _Mixers = list() 
 _MutedTracks = list()
+
 
 #endregion
 
@@ -228,22 +233,26 @@ def BuildPatterns():
     #print ("...patterns...")
     # Build a list of FL patterns
     patcount = patterns.patternCount()
+    
+    if patcount > 20:  # on a new track it might return a patternCount every track 0..999 (Pattern1..Pattern999)
+        patcount = 20  # so enforce a max of 20 for now
+
     for patnum in range(1, patcount+1): #start at 1
         newPat = TnfxPattern()
         newPat.FLIndex = patnum 
         newPat.Name = patterns.getPatternName(patnum)
         patterns.jumpToPattern(patnum) # this will activate a channel
         chan = channels.selectedChannel(0,0,1)
-        trk = getMixerTrackForPattern(patnum)
+        trk = channels.getTargetFxTrack(chan)
         newPat.Channel = next(x for x in _Channels if x.FLIndex == chan) # next gets single element
         newPat.Mixer = next(x for x in _Mixers if x.FLIndex == trk) # next gets single element
         newPat.Color = getColorFromFL(patterns.getPatternColor(patnum))
-        if(newPat.Name == "Drums"):
+        if(newPat.Name.startswith("FPC") ):
             _drumMixerTrk = trk
         _Patterns.append(newPat)
-        print('......Pattern:', patnum, newPat.Name, newPat.FLIndex,
-              '-->Channel:', newPat.Channel.Name, newPat.Channel.FLIndex,
-              '-->Mixer:', newPat.Mixer.Name, newPat.Mixer.FLIndex)
+        print('......Pattern #', patnum, newPat.Name,  #newPat.FLIndex,
+              '-->Channel #', newPat.Channel.FLIndex, newPat.Channel.Name, 
+              '-->Mixer #', trk, newPat.Mixer.FLIndex, newPat.Mixer.Name)
 
 def nfxSetFIRELEDCol(fire, idx, col, dimFactor):
     #print('SetLEDCol', idx, col)
@@ -286,6 +295,15 @@ def getMixerTrackForPattern(pat):
 def getMixerTrackForChannel(chan):
     return channels.getTargetFxTrack(chan) 
 
+def GetTempoDiv(div):
+    tempo = mixer.getCurrentTempo(0) / 1000
+    beat = 60/tempo * 1000
+    halfbeat = 30/tempo * 1000
+    step = 15/tempo * 1000
+    halfstep = 7.5/tempo * 1000
+    divs = [beat, halfbeat, step, halfstep]
+    return divs[div]
+
 def MuteMixerTrack(trk, newVal = -1):
     global _Patterns
     pat = next(x for x in _Patterns if x.Mixer.FLIndex == trk) 
@@ -307,7 +325,6 @@ def MuteMixerTrack(trk, newVal = -1):
     print('MuteMixerTrack: ', _Patterns[patIdx].Muted, newVal, trk, _Patterns[patIdx].Mixer.FLIndex)
     #print('MuteMixerTrack', trk, _Patterns[patIdx].FLIndex, 'M:', newVal, currVal)
 
- 
 def MutePlaylistTrack(pltrk, newVal = -1):
     currVal = 0
     if (playlist.isTrackMuted(pltrk)):
@@ -329,7 +346,14 @@ def MutePlaylistTrack(pltrk, newVal = -1):
     patterns.jumpToPattern(-1)
     patterns.jumpToPattern(pltrk)
     
-
+def getColorFromFL(FLColor):
+    #FLColor = channels.getChannelColor(n)
+    h, s, v = utils.RGBToHSVColor(FLColor)
+    FLColor, h, s, v = _Fire.ScaleColor(1.0, h, s, v)
+    r = ((FLColor >> 16) & 0xFF) // 2
+    b = (FLColor & 0xFF) // 2
+    g = ((FLColor >> 8) & 0xFF) // 2
+    return utils.RGBToColor(r, g, b)
 
 def getPadMapFromPadNum(padnum):
     return _PadMaps[padnum]
@@ -347,6 +371,17 @@ def getPadMapFromChannelNum(channum):
     for pMap in patPads: # PatternPads:
         padnum = pMap.FirePadIndex
     return _PadMaps[padnum]
+
+
+def setSnapMode(newmode):
+    mode = ui.getSnapMode()
+    while(mode < newmode):
+        ui.snapMode(1) #inc by 1
+        mode = ui.getSnapMode()
+    while(mode > newmode):
+        ui.snapMode(-1) #inc by 1
+        mode = ui.getSnapMode()
+
 
 def ResetMutes():
     for mix in _Mixers:
@@ -373,7 +408,7 @@ def ShowPianoRoll(showVal):
     selPat = _Patterns[selPatIdx] #0 based 
     currVal = selPat.ShowPianoRoll
 
-    print('ShowPR: ', _Patterns[selPatIdx].ShowPianoRoll)
+    #print('ShowPR: ', _Patterns[selPatIdx].ShowPianoRoll)
 
     ui.showWindow(device_Fire.widChannelRack)
     chanNum = channels.selectedChannel(0,0,1)
@@ -392,7 +427,7 @@ def ShowPianoRoll(showVal):
         ui.hideWindow(device_Fire.widPianoRoll)
         _Patterns[selPatIdx].ShowPianoRoll = 0
 
-    print('ShowPR: ', _Patterns[selPatIdx].ShowPianoRoll)
+    #print('ShowPR: ', _Patterns[selPatIdx].ShowPianoRoll)
 
 def ShowChannelSettings(showVal):
     global _Patterns
@@ -407,15 +442,12 @@ def ShowChannelSettings(showVal):
         else:
             showVal = 0
 
-    print('ShowCS: ', _Patterns[selPatIdx].ShowChannelSettings)
+    #print('ShowCS: ', _Patterns[selPatIdx].ShowChannelSettings)
     ui.showWindow(device_Fire.widChannelRack)
     chanNum = channels.selectedChannel(0,0,1)
     channels.showCSForm(chanNum, showVal)
     _Patterns[selPatIdx].ShowChannelSettings = showVal
-    print('ShowCS: ', _Patterns[selPatIdx].ShowChannelSettings)
-
-
-
+    #print('ShowCS: ', _Patterns[selPatIdx].ShowChannelSettings)
 
 def ShowChannelEditor(showVal):
     global _Patterns
@@ -429,33 +461,19 @@ def ShowChannelEditor(showVal):
         else:
             showVal = 0    
 
-    print('ShowCE: ', _Patterns[selPatIdx].ShowChannelEditor)
+    #print('ShowCE: ', _Patterns[selPatIdx].ShowChannelEditor)
     ui.showWindow(device_Fire.widChannelRack)
     chanNum = channels.selectedChannel(0,0,1)
     channels.showEditor(chanNum, showVal)
     _Patterns[selPatIdx].ShowChannelEditor = showVal
-    print('ShowCE: ', _Patterns[selPatIdx].ShowChannelEditor)
-
-def getColorFromFL(FLColor):
-    #FLColor = channels.getChannelColor(n)
-    h, s, v = utils.RGBToHSVColor(FLColor)
-    FLColor, h, s, v = _Fire.ScaleColor(1.0, h, s, v)
-    r = ((FLColor >> 16) & 0xFF) // 2
-    b = (FLColor & 0xFF) // 2
-    g = ((FLColor >> 8) & 0xFF) // 2
-    return utils.RGBToColor(r, g, b)
-
+    #print('ShowCE: ', _Patterns[selPatIdx].ShowChannelEditor)
 
 #endregion
 
 #region FL MIDI Events
 # call this from the end of TFire.OnInit
 def OnInit(fire):
-    print("_______________nfxFIRE v 0.0.pre-alpha - warbeats.com_______________")
     InitAll(fire)
-    ActivatePattern(_Patterns[0].FLIndex)
-    RefreshFirePads(fire, False)
-    print("____________________________________________________________________")
 
 # called from TFire.OnIdle
 def OnIdle(fire):
@@ -465,11 +483,9 @@ def OnIdle(fire):
     global _lastPattern 
 
     Update_Fire(fire) 
-    RefreshProgress(fire)
-    RefreshFPCPads(fire)
-
-    if(_RepeatNote):
-        RefreshMacroPads
+    #RefreshProgress(fire)
+    #RefreshFPCPads(fire)
+    #RefreshPatternPads(fire) # causes crash on changing tracks - no idea why.
 
     refresh = False
     
@@ -484,13 +500,16 @@ def OnIdle(fire):
 
     # check if user selected a new pattern in FL and follow...
     newPatNum = patterns.patternNumber() 
-    if(newPatNum != _selectedPattern) and (_selectedPattern != -1): #if the pattern was picked in FL, handle..
+    if(newPatNum != _selectedPattern) and (_selectedPattern > -1): #if the pattern was picked in FL, handle..
         ActivatePattern(newPatNum)
         refresh = True 
 
     if(refresh):
         RefreshFirePads(fire, False) 
-        
+
+    if(_RepeatNote):
+        RefreshMacroPads(fire)
+
     _nfxBlinkTimer += 1
     _nfxBlinkSpeed = GetTempoDiv(2)
     if _nfxBlinkTimer >= _nfxBlinkSpeed * 6:
@@ -501,12 +520,8 @@ def OnMidiMsg(fire, event):
     global _IsRepeating
     global _RepeatNote
     origevent = event
-    #print("nfxOnMidiMsg", event.data1, event.midiId)
-    #RefreshFirePads(fire, False)
     wasHandled = False
     Update_Fire(fire)
-    #RefreshPatternPads(fire)
-    #return 
 
     if event.midiId in [MIDI_NOTEON, MIDI_NOTEOFF]:
         if (event.data1 >= device_Fire.PadFirst) & (event.data1 <= device_Fire.PadLast):
@@ -514,11 +529,11 @@ def OnMidiMsg(fire, event):
             
             PadIndex = event.data1
 
-            #if (event.midiId == MIDI_NOTEON):
-                #print('MidiMsg.PadOn=', PadIndex)
+            if (event.midiId == MIDI_NOTEON):
+                print('MidiMsg.PadOn=', PadIndex)
             
-            #if (event.midiId == MIDI_NOTEOFF):
-                #print('MidiMsg.PadOff=', PadIndex)
+            if (event.midiId == MIDI_NOTEOFF):
+                print('MidiMsg.PadOff=', PadIndex)
                 
             event.handled = wasHandled
 
@@ -526,19 +541,9 @@ def OnMidiMsg(fire, event):
 
 #endregion
 
-def GetTempoDiv(div):
-    tempo = mixer.getCurrentTempo(0) / 1000
-    beat = 60/tempo * 1000
-    halfbeat = 30/tempo * 1000
-    step = 15/tempo * 1000
-    halfstep = 7.5/tempo * 1000
-    divs = [beat, halfbeat, step, halfstep]
-    return divs[div]
-
-
-
 #region Refresh
 def RefreshProgress(fire):
+    #return
     if not isAllowed():
         return
 
@@ -550,26 +555,25 @@ def RefreshSongPos(fire):
         return
 
     if(transport.isPlaying()):
-        i = 0
+        colorOn = cWhite
+        colorDim = cWhite 
+        if(transport.isRecording()):
+            colorDim = getSelPat().Color 
+            colorOn = getSelPat().Color 
+        idx = 0
         songpos = transport.getSongPos()
-        nfxSetFIRELEDCol(fire, ProgressPads[0], ProgressPadsDim, 0)
-        nfxSetFIRELEDCol(fire, ProgressPads[1], ProgressPadsDim, 0)
-        nfxSetFIRELEDCol(fire, ProgressPads[2], ProgressPadsDim, 0)
-        nfxSetFIRELEDCol(fire, ProgressPads[3], ProgressPadsDim, 0)
-        if(0.0 <= songpos <= 0.25):
-            nfxSetFIRELEDCol(fire, ProgressPads[0], cWhite, 0)
-        if(0.25 <= songpos <= 0.50 ):
-            nfxSetFIRELEDCol(fire, ProgressPads[1], cWhite, 0)
-        if(0.50 <= songpos <= 0.75 ):
-            nfxSetFIRELEDCol(fire, ProgressPads[2], cWhite, 0)
-        if(0.75 <= songpos <= 1 ):
-            nfxSetFIRELEDCol(fire, ProgressPads[3], cGreen, 0)
-
-    else:
-        nfxSetFIRELEDCol(fire, ProgressPads[0], cOff, 0)
-        nfxSetFIRELEDCol(fire, ProgressPads[1], cOff, 0)
-        nfxSetFIRELEDCol(fire, ProgressPads[2], cOff, 0)
-        nfxSetFIRELEDCol(fire, ProgressPads[3], cOff, 0)
+        padCnt = len(ProgressPads)
+        for p in range(0, padCnt):
+            padDiv = 1/padCnt # 1 is max songpos
+            padLimit = padDiv * p
+            #print(songpos, padDiv, padLimit)
+            if(songpos > padLimit):
+                nfxSetFIRELEDCol(fire, ProgressPads[p], colorOn, 0)
+            else:
+                nfxSetFIRELEDCol(fire, ProgressPads[p], colorDim, 3)
+    else: 
+        for p in ProgressPads:
+            nfxSetFIRELEDCol(fire, p, cOff, 0)
 
 def RefreshPatternPads(fire):
     global _Patterns 
@@ -586,7 +590,7 @@ def RefreshPatternPads(fire):
         if(_selectedPattern == trk):
             nfxSetFIRELEDCol(fire, pad, color ,_subpattern)
         else:
-            nfxSetFIRELEDCol(fire, pad, color, 3)
+            nfxSetFIRELEDCol(fire, pad, color, 2)
 
         #if (not fire.CurrentKnobsMode in [] != device_Fire.KnobsModeMixer:
         if(nfxPat.Muted == 1):
@@ -679,12 +683,14 @@ def RefreshChannelPads(fire):
             if(_selectedPattern > -1):
                 selPat = getSelPat()
                 # determine the color to use 
-                flcol = patterns.getPatternColor(selPat.FLIndex) & 0xFFFFFF
+                #flcol = patterns.getPatternColor(selPat.FLIndex)
 
-                if(flcol in PatternFLColors):
-                    col = PatternColors[PatternFLColors.index(flcol) ]
-                else:
-                    col = flcol
+                #if(flcol in PatternFLColors):
+                #    col = PatternColors[PatternFLColors.index(flcol) ]
+                #else:
+                #    col = flcol
+                
+                col = selPat.Color 
 
                 # dim factor 2
                 #print('ChanPad', padNum, col)
@@ -724,7 +730,6 @@ def RefreshChannelPads(fire):
             else:
                 nfxSetFIRELEDCol(fire, padNum, cDimWhite, 0)  
             
-            
 def GetScaleGrid(rootNote = 0, startOctave = 2, scale = HARMONICSCALE_MINORPENTATONIC):
     global _PadMaps
     #get lowest octave line
@@ -737,17 +742,10 @@ def GetScaleGrid(rootNote = 0, startOctave = 2, scale = HARMONICSCALE_MINORPENTA
             revRow = 3-row # reverse to go from bottom to top
             rowOffset = 16 * revRow # 0,16,32,48
             padIdx = rowOffset + colOffset
-            #print('...MIDI Note mapping:','row', row, revRow, 'col', colOffset, 'padIdx', padIdx, 
-            #'note', noteVal, 'pMap.Note', _PadMaps[padIdx].MIDINote)
             _PadMaps[padIdx].MIDINote = noteVal
             _PadMaps[padIdx].IsRootNote = (colOffset == 0) or (colOffset == notesInScale) 
-            print('...pMap.MIDINote', _PadMaps[padIdx].MIDINote, _PadMaps[padIdx].IsRootNote)            
+            #print('...pMap.MIDINote', _PadMaps[padIdx].MIDINote, _PadMaps[padIdx].IsRootNote)            
     
-    
-
-
-                  
-
 def RefreshMacroPads(fire):
     # Macro Pads - Third row
     if not isAllowed():
@@ -764,8 +762,7 @@ def RefreshMacroPads(fire):
                     nfxSetFIRELEDCol(fire, macPad, cWhite, 0)        
                 else:
                     nfxSetFIRELEDCol(fire, macPad, macCol, 0)
-        
-
+    
 #endregion
 
 #region Pad Handlers
@@ -823,7 +820,7 @@ def HandleFPCPress(fire, event, m):
 def HandlePadPress(fire, event):
     global _lastEvent
     global _PadMaps
-    print('HandlePadPress', event.data1, event.data2)
+    #print('HandlePadPress', event.data1, event.data2)
     Update_Fire(fire)     
     _lastEvent.status = event.status
 
@@ -848,6 +845,13 @@ def HandlePadPress(fire, event):
         if(padIndex in MacroPads):
             HandleMacros(fire, event, padIndex)
             event.handled = True 
+
+        if(padIndex in ProgressPads):
+           padOffs = ProgressPads.index(padIndex) 
+           padDiv = 1/len(ProgressPads) 
+           padLimit = padDiv * padOffs
+           print(padOffs, padDiv, padLimit)
+           transport.setSongPos(padLimit)
 
     if (event.midiId in [MIDI_NOTEOFF]):
         #print("HandlePadPress.NOTEOFF --->", event.data1, event.data2, event.midiId)
@@ -904,7 +908,6 @@ def HandleChannelPads(fire, PadIndex):
             
         if(chanPadIdx == _cpShowCS): # toggle ChannelSettings
             ShowChannelSettings(-1)
-            
 
 def HandleMacros(fire, event, PadIndex):
     global _PadMaps
@@ -932,8 +935,11 @@ def HandleMacros(fire, event, PadIndex):
             if(not _RepeatNote):
                 device.stopRepeatMidiEvent()
                 _IsRepeating = False 
+                setSnapMode(Snap_Step)
+            else: 
+                setSnapMode(Snap_FourthStep)
         if MacroIndex == 3:
-            print("unused")
+            transport.globalTransport(FPT_Snap, 48) #snap toggle
         if MacroIndex == 4:
             ClearMidi(fire)
         if MacroIndex == 5:
@@ -962,12 +968,17 @@ def ActivatePattern(patNum, showPlugin = False, setMixer = True):
     global _subPat
     global _showFPCColors
     global _drumMixerTrk
+    global _IsActivating
+
+    if(_IsActivating):
+        return
+    
+    _IsActivating = True 
 
     nfxPat = _Patterns[patNum-1] # 0 based
     mixerNum = nfxPat.Mixer.FLIndex 
     selPat = getSelPat()
     mixerNumPrev = selPat.Mixer.FLIndex
-    #print('ShowPR', nfxPat.ShowPianoRoll)
 
     # close the previous channel plugin
     if(_selectedPattern > -1): 
@@ -987,7 +998,7 @@ def ActivatePattern(patNum, showPlugin = False, setMixer = True):
     #use subchannel index from results
     nfxPat = subPatterns[_subpattern] 
     
-    #print('IN->Pattern:', _subpattern,  '_Sel:', _selectedPattern, 'Mixer:', mixerNum, )
+    print('IN->Pattern:', _subpattern,  '_Sel:', _selectedPattern, 'Mixer:', mixerNum, )
 
      # increment sub pattern ie +0 (master), +1, +2 when needed
     if(numOfChannels > 1 ):
@@ -997,12 +1008,13 @@ def ActivatePattern(patNum, showPlugin = False, setMixer = True):
 
     patterns.jumpToPattern(nfxPat.FLIndex)
     _selectedPattern = nfxPat.FLIndex
+    isFPC = nfxPat.Name.startswith('FPC')
 
-    if (mixerNum == _drumMixerTrk): # show FPC colors
-        print('fpc', mixerNum, _drumMixerTrk)
+    if (isFPC): # show FPC colors
+        #print('fpc', mixerNum, _drumMixerTrk)
         _showFPCColors = True
     else:
-        print('not fpc', mixerNum, _drumMixerTrk)
+        #print('not fpc', mixerNum, _drumMixerTrk)
         _showFPCColors = False
 
     RefreshFPCPads(_Fire)
@@ -1015,10 +1027,12 @@ def ActivatePattern(patNum, showPlugin = False, setMixer = True):
     ShowChannelEditor(nfxPat.ShowChannelEditor)
     ShowPianoRoll(nfxPat.ShowPianoRoll)
 
+    _IsActivating = False
+
     #ui.openEventEditor(mixer.getTrackPluginId(trkNum,0) + REC_Mixer_Vol, EE_EE)
     #ui.openEventEditor(channels.getRecEventId(trkNum) + REC_Mixer_Vol, EE_EE)
     #ui.openEventEditor(channels.getRecEventId(chanNum) + REC_Chan_Pitch, EE_EE)
-    #print('OUT->Pattern:', nfxPat.FLIndex, '_Sel:', _selectedPattern, 'Mixer:', mixerNum, )
+    print('OUT->Pattern:', nfxPat.FLIndex, '_Sel:', _selectedPattern, 'Mixer:', mixerNum, )
 #endregion
 
   
@@ -1034,12 +1048,6 @@ def InitMacros():
         m.padindex = MacroPads[i]
         m.name = MacroNames[i]
         _Macros.append(m)
-
-def Animate():
-    for aPad in FPC_APads:
-        colIdx = randint(0,7)
-        color = PatternColors[colIdx]
-        nfxSetFIRELEDColor(_Fire, aPad, )
 
 def ResetPadMaps():
     global _PadMaps
@@ -1063,20 +1071,18 @@ def ResetPadMaps():
 
         #iterates the FIRE pads defined for patterns - top row
         if padNum in PatternPads:
-            patidx = PatternPads.index(padNum) # ex.  Pad[0] = nfxPattern[1]
+            patidx = PatternPads.index(padNum) # ex.  Pad[0] = _Patterns[1]
             patNum = PatternChannels[patidx]
-            #print('patNum', patNum)
-            
-            nfxPat = _Patterns[patNum-1]
-
-            ##print('...added pad:', patNum, nfxPat.Name, nfxPat.FLIndex, '-->Channel:', nfxPat.Channel.Name, nfxPat.Channel.FLIndex,             '-->Mixer:', nfxPat.Mixer.Name, nfxPat.Mixer.FLIndex)
-
+            nfxPat = _Patterns[patNum-1] #0 based
+            #print('...added pad:', patNum, nfxPat.Name, nfxPat.FLIndex, '-->Channel:', nfxPat.Channel.Name, nfxPat.Channel.FLIndex,
+            #              '-->Mixer:', nfxPat.Mixer.Name, nfxPat.Mixer.FLIndex)
             pMap.Name = nfxPat.Name
             pMap.Mixer = nfxPat.Mixer
             pMap.Channel = nfxPat.Channel
-            colIdx = nfxPat.FLIndex-1 # 0 based
+            pMap.Color = nfxPat.Color
+            #colIdx = nfxPat.FLIndex-1 # 0 based
             #print('ColorIdx:', colIdx, 'pMap:', pMap.Name, pMap.Mixer.Name, pMap.Channel.Name)
-            pMap.Color = PatternColors[colIdx] 
+            #pMap.Color = PatternColors[colIdx] 
 
         if padNum in MacroPads:                 # is the pad in the list of Macro Pads?
             macIdx = MacroPads.index(padNum)    # get the Macro Index
@@ -1085,7 +1091,7 @@ def ResetPadMaps():
 
         _PadMaps.append(pMap)
 
-        if(len(pMap.Name) > 1 ):
+        if(len(pMap.Name) > 1 ) and (False): #todo logic for showing
             print('......Pad Mapped: ', pMap.Name, pMap.FirePadIndex, pMap.MIDINote)
 
 def Update_Fire(fire):
@@ -1210,24 +1216,26 @@ def RecolorPatterns():
     # do the patterns
     patcount = patterns.patternCount()
     #print('pattern count', patcount)
-    patcol = PatternFLColors[0]
+    #patcol = PatternFLColors[0]
     offset = 1
     plcount = playlist.trackCount()
     chan = -1
+    patcol = patterns.getPatternColor(1)
 
-    for p in range(1,patcount+1):
-        patterns.jumpToPattern(p)
-        pName = patterns.getPatternName(p)
+    for patIdx in range(1,patcount+1):
+        patterns.jumpToPattern(patIdx)
+        patcol = patterns.getPatternColor(patIdx)
+        pName = patterns.getPatternName(patIdx)
         c = channels.selectedChannel(0,0,1)
-
-        print('Pattern:', pName, p, patcol, chan, c)
+        print('Pattern:', pName, patIdx, patcol, chan, c)
         if(pName.startswith('...')): #use prev color
-            patterns.setPatternColor(p, patcol)
+            patterns.setPatternColor(patIdx, patcol)
             PatternChannels[c] = chan
             offset += 1
         else:# use new color
-            patcol = PatternFLColors[p-offset]
-            patterns.setPatternColor(p, patcol)
+            #patcol = getSelPat().Color # PatternFLColors[patIdx-offset]
+            patcol = patterns.getPatternColor(patIdx)
+            patterns.setPatternColor(patIdx, patcol)
             ui.showWindow(widChannelRack)
             print('Channel/FX', chan, c)
             if(c > -1):
@@ -1249,20 +1257,31 @@ def RecolorPatterns():
     print(PatternChannels)
 
 def InitAll(fire):
+    print("_______________nfxFIRE v 0.0.pre-alpha - warbeats.com_______________")
     _Fire.DisplayTimedText("nfxFIRE v0.0...")
     print('...Initializing')
     Update_Fire(fire) 
     #set the default modes for me
     fire.CurrentMode = device_Fire.ModeDrum 
+    setSnapMode(Snap_Step)
     lastknobmode = fire.CurrentKnobsMode
     print('...Syncing FL Track data')
     BuildMixers()
     BuildChannels()
     BuildPatterns()    
+    ResetMutes()
     print('...Syncing FIRE Pad data')
     InitMacros()    
     ResetPadMaps()
-    ResetMutes()
+    GetScaleGrid(0,2, HARMONICSCALE_MINORPENTATONIC) # Call after resetting Pad maps
+    #ActivatePattern(_Patterns[0].FLIndex)
+    RefreshFirePads(fire, False)
+    print("____________________________________________________________________")
+
+
+
+
+
 #endregion        
 
         
