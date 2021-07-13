@@ -8,7 +8,7 @@
 #  The folder with this code.
 
 # yes this code is messy and redundant on places. its in a constant state of refactor
-# and development. 
+# and development. get used to it ;)
 
 #region imports
 import time
@@ -110,6 +110,9 @@ _lsLen1 = 32
 _lsLen2 = 64
 _lsLen3 = 96
 
+_snapModesList = [Snap_Beat, Snap_HalfBeat, Snap_FourthBeat, Snap_Step, Snap_HalfStep, Snap_FourthStep, Snap_None]
+_snapIdx = 3 #initial value
+
 MacroPads = [40, 41, 42, 43, 44, 45, 46, 47]
 MacroColors = [cGreen,     cMagenta, cOrange, cBlue, cRed,        cYellow,        cCyan, cOrange]
 MacroNames = ['Save Undo', 'Undo',   'Repeat', 'Snap', 'Clear MIDI', 'Reset UI/ALL', 'TEST', 'Re-INIT']
@@ -153,12 +156,7 @@ _FPC_Notes = [37, 36, 42, 54, 60, 61, 62, 63,
               49, 55, 51, 53, 72, 73, 74, 75, -1]
 
 
-# snap defs are in MIDI.py aka Snap_Cell, Snap_line, etc
-_snapModes = ["Default", "Line", "?", "Cell", "None", 
-    "1/6 Step", "1/4 Step", "1/3 Step", "1/2 Step", "Step", 
-    "1/6 Beat", "1/4 Beat", "1/3 Beat", "1/2 Beat", "Beat", 
-    "Bar"]
- 
+
 #endregion
 
 #region Globals
@@ -184,7 +182,12 @@ _Channels = list()
 _Mixers = list() 
 _MutedTracks = list()
 
-
+# snap defs are in MIDI.py aka Snap_Cell, Snap_line, etc
+_snapModes = ["Default", "Line", "?", "Cell", "None", 
+    "1/6 Step", "1/4 Step", "1/3 Step", "1/2 Step", "Step", 
+    "1/6 Beat", "1/4 Beat", "1/3 Beat", "1/2 Beat", "Beat", 
+    "Bar"]
+ 
 #endregion
 
 #region nfx/FL/FIRE Helpers
@@ -381,6 +384,8 @@ def setSnapMode(newmode):
     while(mode > newmode):
         ui.snapMode(-1) #inc by 1
         mode = ui.getSnapMode()
+    
+    _Fire.DisplayTimedText('Snap: ' + _snapModes[mode+1] )
 
 
 def ResetMutes():
@@ -473,6 +478,14 @@ def ShowChannelEditor(showVal):
 #region FL MIDI Events
 # call this from the end of TFire.OnInit
 def OnInit(fire):
+
+    #set the default modes for my own preference
+    fire.CurrentMode = device_Fire.ModeDrum 
+    setSnapMode(_snapIdx)
+
+    if(not isAllowed()):
+        return 
+
     InitAll(fire)
 
 # called from TFire.OnIdle
@@ -481,21 +494,37 @@ def OnIdle(fire):
     #OBS global nfxUpdateTimer
     global _lastKnobMode
     global _lastPattern 
-
     Update_Fire(fire) 
-    #RefreshProgress(fire)
-    #RefreshFPCPads(fire)
+
+    if(not isAllowed()):
+        return 
+
+
+    RefreshProgress(fire)
     #RefreshPatternPads(fire) # causes crash on changing tracks - no idea why.
 
     refresh = False
     
-    #force refresh on mode change
+    # these lines force the Fire to use only channel and mixer modes
+    if fire.CurrentKnobsMode == device_Fire.KnobsModeUser1:
+       fire.CurrentKnobsMode = device_Fire.KnobsModeChannelRack
+    if fire.CurrentKnobsMode == device_Fire.KnobsModeUser2:
+       fire.CurrentKnobsMode = device_Fire.KnobsModeMixer
+
+    #force refresh on mode change       
     if(_lastKnobMode != fire.CurrentKnobsMode):
         _lastKnobMode = fire.CurrentKnobsMode
+
         if(fire.CurrentKnobsMode == device_Fire.KnobsModeMixer): # if mixer, bring it forward
-            print('showing mixer')
+            print('Mixer Mode')
             mixer.setTrackNumber(_Patterns[_selectedPattern-1].Mixer.FLIndex) 
             ui.showWindow(device_Fire.widMixer)
+            
+        if(fire.CurrentKnobsMode == device_Fire.KnobsModeChannelRack): # if mixer, bring it forward
+            print('Channel Mode')
+            mixer.setTrackNumber(_Patterns[_selectedPattern-1].Mixer.FLIndex) 
+            ui.showWindow(device_Fire.widChannelRack)
+            
         refresh = True 
 
     # check if user selected a new pattern in FL and follow...
@@ -523,6 +552,10 @@ def OnMidiMsg(fire, event):
     wasHandled = False
     Update_Fire(fire)
 
+    if(not isAllowed()):
+        return 
+
+
     if event.midiId in [MIDI_NOTEON, MIDI_NOTEOFF]:
         if (event.data1 >= device_Fire.PadFirst) & (event.data1 <= device_Fire.PadLast):
             event.data1 -= device_Fire.PadFirst # event.data1 is now 0..63    
@@ -535,15 +568,15 @@ def OnMidiMsg(fire, event):
             if (event.midiId == MIDI_NOTEOFF):
                 print('MidiMsg.PadOff=', PadIndex)
                 
+                
             event.handled = wasHandled
 
-    #ShowMacroButtons(fire, False)
+        RefreshFirePads(fire, False)
 
 #endregion
 
 #region Refresh
 def RefreshProgress(fire):
-    #return
     if not isAllowed():
         return
 
@@ -798,7 +831,7 @@ def HandleFPCPress(fire, event, m):
         #print('.......FPC', event.data1, 'PadIdx', padIdx,'m', m,  'Note', note, 
         #   'MIDINote', _PadMaps[padIdx].MIDINote, 'RPT:', _RepeatNote, rptTime)
 
-        channels.midiNoteOn(chan, note, vel)
+        channels.midiNoteOn(chan, note, 112)
 
         if(_RepeatNote) and (not _IsRepeating):
             _IsRepeating = True 
@@ -913,6 +946,7 @@ def HandleMacros(fire, event, PadIndex):
     global _PadMaps
     global _RepeatNote
     global _IsRepeating
+    global _snapIdx 
 
     # check if a macro pad is pressed
     if PadIndex in MacroPads:
@@ -939,7 +973,11 @@ def HandleMacros(fire, event, PadIndex):
             else: 
                 setSnapMode(Snap_FourthStep)
         if MacroIndex == 3:
-            transport.globalTransport(FPT_Snap, 48) #snap toggle
+            _snapIdx += 1
+            if(_snapIdx > len(_snapModesList) - 1):
+                _snapIdx = 0
+            setSnapMode( _snapModesList[_snapIdx])
+#            transport.globalTransport(FPT_Snap, 48) #snap toggle
         if MacroIndex == 4:
             ClearMidi(fire)
         if MacroIndex == 5:
@@ -949,7 +987,7 @@ def HandleMacros(fire, event, PadIndex):
             else:
                 ResetUI(fire)
         if MacroIndex == 6:
-            GetScaleGrid(0, 2, HARMONICSCALE_BLUES)
+            GetScaleGrid(0, 3, HARMONICSCALE_BLUES)
         if MacroIndex == 7:
             if(fire.AltHeld):
                 OnInit(fire)
@@ -1008,7 +1046,7 @@ def ActivatePattern(patNum, showPlugin = False, setMixer = True):
 
     patterns.jumpToPattern(nfxPat.FLIndex)
     _selectedPattern = nfxPat.FLIndex
-    isFPC = nfxPat.Name.startswith('FPC')
+    isFPC = nfxPat.Name.startswith('FPC') or nfxPat.Name.startswith('...FPC')
 
     if (isFPC): # show FPC colors
         #print('fpc', mixerNum, _drumMixerTrk)
@@ -1128,16 +1166,13 @@ def ClearMidi(fire):
     if(isRec):
         transport.record() #turn off
 
-    if(fire.AltHeld) and (False): #diabled for now
-
+    if(fire.AltHeld): 
         fire.DisplayTimedText('Clearing ALL')
         pNow = _selectedPattern
         patcount = patterns.patternCount()
         for p in range(1, patcount+1):
             ActivatePattern(p)
             ClearPattern()
-
-
     else:
         #print('Clearing Pattern')
         ClearPattern()
@@ -1149,12 +1184,8 @@ def ClearMidi(fire):
     _isClearing = False
 
 def ClearPattern():
-    #selPat = getSelPat()
-    #channels.selectChannel(selPat.Channel.FLIndex)
     ui.showWindow(widChannelRack)
-    #(0.25)
     ui.cut()
-    #time.sleep(0.25)
 
 def SaveUndo():
     _Fire.DisplayTimedText("Save Undo")
@@ -1257,24 +1288,28 @@ def RecolorPatterns():
     print(PatternChannels)
 
 def InitAll(fire):
+    #show the banner....
     print("_______________nfxFIRE v 0.0.pre-alpha - warbeats.com_______________")
     _Fire.DisplayTimedText("nfxFIRE v0.0...")
     print('...Initializing')
     Update_Fire(fire) 
-    #set the default modes for me
-    fire.CurrentMode = device_Fire.ModeDrum 
-    setSnapMode(Snap_Step)
+    
+    # read the FL tracks info...
     lastknobmode = fire.CurrentKnobsMode
     print('...Syncing FL Track data')
     BuildMixers()
     BuildChannels()
     BuildPatterns()    
     ResetMutes()
+
+    # read our pad defs and colors and assign as needed
     print('...Syncing FIRE Pad data')
     InitMacros()    
     ResetPadMaps()
-    GetScaleGrid(0,2, HARMONICSCALE_MINORPENTATONIC) # Call after resetting Pad maps
-    #ActivatePattern(_Patterns[0].FLIndex)
+
+    # set the C minor Penta for now...
+    GetScaleGrid(0,3, HARMONICSCALE_MINORPENTATONIC) # must Call after resetting Pad maps
+    
     RefreshFirePads(fire, False)
     print("____________________________________________________________________")
 
