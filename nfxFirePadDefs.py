@@ -3,7 +3,7 @@ from nfxFireColors import *
 
 #AKAI Pads  0..63 starts from top left  to right bottom
 
-#pads to display the plalist patterns - top row, last 8
+#pads to display the playlist patterns - top row, last 8
 PatternPads = [8, 9, 10, 11, 12, 13, 14, 15]
 
 # FL Patterns to associate with the above pads - 
