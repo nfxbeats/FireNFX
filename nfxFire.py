@@ -1,19 +1,10 @@
-# name= nfxFireUtils
+# name= Akai FireNFX
 #
-#  Edit device_fire to import nfxFireUtils
-# nfxOnInit(fire)
-# copy the python files from
-#  C:\Program Files (x86)\Image-Line\Shared\Python\Lib\*
-#    to
-#  The folder with this code.
-
 # yes this code is messy and redundant on places. its in a constant state of refactor
 # and development. get used to it ;)
+#
 
 # region imports
-
-
-#from nfxFirePadDefs import *
 import nfxFirePadDefs as defs 
 from nfxFireColors import *
 import utils
@@ -163,7 +154,7 @@ def BuildMixers():
 def BuildChannels():
     global _Channels
     _Channels.clear()
-    
+
     #print ("...channels...")
     # Build a list of FL patterns
     chanCount = channels.channelCount()
@@ -276,7 +267,7 @@ def MuteMixerTrack(trk, newVal=-1):
     patIdx = pat.FLIndex - 1  # 0 based
     currVal = _Patterns[patIdx].Muted
 
-    print('MuteMixerTrack: ', _Patterns[patIdx].Muted, newVal, trk, patIdx)
+    #print('MuteMixerTrack: ', _Patterns[patIdx].Muted, newVal, trk, patIdx)
 
     if(newVal == -1):
         if(currVal == 0):
@@ -288,9 +279,8 @@ def MuteMixerTrack(trk, newVal=-1):
     # mixer.muteTrack(trk, newVal) #explicit set
     MutePlaylistTrack(pat.FLIndex, newVal)
 
-    print('MuteMixerTrack: ', _Patterns[patIdx].Muted,
-          newVal, trk, _Patterns[patIdx].Mixer.FLIndex)
-    #print('MuteMixerTrack', trk, _Patterns[patIdx].FLIndex, 'M:', newVal, currVal)
+    #print('MuteMixerTrack: ', _Patterns[patIdx].Muted,           newVal, trk, _Patterns[patIdx].Mixer.FLIndex)
+    
 
 
 def MutePlaylistTrack(pltrk, newVal=-1):
@@ -304,7 +294,7 @@ def MutePlaylistTrack(pltrk, newVal=-1):
         elif(currVal == 1):
             newVal = 0
 
-    print('MutePLTrack', pltrk, newVal)
+    #print('MutePLTrack', pltrk, newVal)
     if(currVal != newVal):
         playlist.muteTrack(pltrk)  # explicit set
 
@@ -456,9 +446,8 @@ def ShowChannelEditor(showVal):
 # endregion
 
 # region FL MIDI Events
+
 # call this from the end of TFire.OnInit
-
-
 def OnInit(fire):
     Update_Fire(fire)
 
@@ -474,7 +463,6 @@ def OnInit(fire):
         RefreshFirePads(fire, False) #forece refresh 
 
 # called from TFire.OnIdle
-
 def OnFPCPadPress(fire, event, m):
     Update_Fire(fire)
 
@@ -493,7 +481,7 @@ def OnPadPress(fire, event):
     if(isAllowed()):  
         HandlePadPress(fire, event)
 
-
+# call from TFire.OnIdle
 def OnIdle(fire):
     global _nfxBlinkTimer
     global _lastKnobMode
@@ -549,8 +537,6 @@ def OnIdle(fire):
         _nfxBlinkTimer = 0
 
 # called from OnMidiMsg, right before the last line
-
-
 def OnMidiMsg(fire, event):
     global _IsRepeating
     global _RepeatNote
@@ -566,20 +552,18 @@ def OnMidiMsg(fire, event):
             PadIndex = event.data1
 
             if (event.midiId == MIDI_NOTEON):
-                print('MidiMsg.PadOn=', PadIndex)
+                #print('MidiMsg.PadOn=', PadIndex)
 
                 if(fire.AltHeld) and (PadIndex == 56):
                     _IsActive = not _IsActive 
-                    print('_IsActive', _IsActive, _Fire.CurrentDrumMode, device_Fire.DrumModeFPC)
                     
                     if(isAllowed() == True):
-                        print('initiing')
                         OnInit(fire)
                         RefreshFirePads(fire, True)
                     #todo de-init?    
 
-            if (event.midiId == MIDI_NOTEOFF):
-                print('MidiMsg.PadOff=', PadIndex)
+            #if (event.midiId == MIDI_NOTEOFF):
+                #print('MidiMsg.PadOff=', PadIndex)
 
             event.handled = wasHandled
 
@@ -864,7 +848,7 @@ def HandleFPCPress(fire, event, m):
         # print('.......FPC', event.data1, 'PadIdx', padIdx,'m', m,  'Note', note,
         #   'MIDINote', _PadMaps[padIdx].MIDINote, 'RPT:', _RepeatNote, rptTime)
 
-        channels.midiNoteOn(chan, note, 112)
+        channels.midiNoteOn(chan, note, 120)
 
         if(_RepeatNote) and (not _IsRepeating):
             _IsRepeating = True
@@ -873,7 +857,7 @@ def HandleFPCPress(fire, event, m):
             device.repeatMidiEvent(event, rptTime, rptTime)
             event.handled = True
     else:
-        print('FPC', event.data1, 'OFF', _RepeatNote)
+        #print('FPC', event.data1, 'OFF', _RepeatNote)
         channels.midiNoteOn(chan, note, 0)
         if(_RepeatNote) and (_IsRepeating):
             _IsRepeating = False
@@ -920,7 +904,7 @@ def HandlePadPress(fire, event):
             padOffs = defs.ProgressPads.index(padIndex)
             padDiv = 1/len(defs.ProgressPads)
             padLimit = padDiv * padOffs
-            print(padOffs, padDiv, padLimit)
+            #print(padOffs, padDiv, padLimit)
             transport.setSongPos(padLimit)
 
     if (event.midiId in [MIDI_NOTEOFF]):
@@ -1005,7 +989,7 @@ def HandleMacros(fire, event, PadIndex):
             UndoPattern()
         if MacroIndex == 2:
             _RepeatNote = not _RepeatNote
-            print('repeat mode', _RepeatNote)
+            print('Repeat mode', _RepeatNote)
             if(not _RepeatNote):
                 device.stopRepeatMidiEvent()
                 _IsRepeating = False
@@ -1078,8 +1062,8 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
     # use subchannel index from results
     nfxPat = subPatterns[_subpattern]
 
-    print('IN->Pattern:', _subpattern,  '_Sel:',
-          _selectedPattern, 'Mixer:', mixerNum, )
+    #print('IN->Pattern:', _subpattern,  '_Sel:',
+         # _selectedPattern, 'Mixer:', mixerNum, )
 
     # increment sub pattern ie +0 (master), +1, +2 when needed
     if(numOfChannels > 1):
@@ -1113,8 +1097,8 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
     #ui.openEventEditor(mixer.getTrackPluginId(trkNum,0) + REC_Mixer_Vol, EE_EE)
     #ui.openEventEditor(channels.getRecEventId(trkNum) + REC_Mixer_Vol, EE_EE)
     #ui.openEventEditor(channels.getRecEventId(chanNum) + REC_Chan_Pitch, EE_EE)
-    print('OUT->Pattern:', nfxPat.FLIndex, '_Sel:',
-          _selectedPattern, 'Mixer:', mixerNum, )
+    #print('OUT->Pattern:', nfxPat.FLIndex, '_Sel:',
+          #_selectedPattern, 'Mixer:', mixerNum, )
 # endregion
 
 # region nfxFuncs
@@ -1335,7 +1319,7 @@ def RecolorPatterns():
             if (plName == pName):
                 playlist.setTrackColor(pl, patcol)
 
-    print('Pattern Channels', defs.PatternChannels)
+    # print('Pattern Channels', defs.PatternChannels)
 
 
 def InitAll(fire):
