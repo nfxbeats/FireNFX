@@ -20,7 +20,7 @@ import utils
 import time
 import harmonicScales
 
-import nfxFireUtils #NFX
+import nfxFire #NFX
 
 FLFireDeviceName = 'Akai FL Studio Fire'
 PadsW = 16
@@ -443,7 +443,7 @@ class TFire():
         self.SetOfs(self.TrackOfs, self.ClipOfs)
         self.ClearDisplay()
 
-        nfxFireUtils.OnInit(self) #NFX
+        nfxFire.OnInit(self) #NFX
 
     def OnDeInit(self):
 
@@ -893,7 +893,7 @@ class TFire():
 
         screen.update()
         screen.unBlank(False)
-        nfxFireUtils.OnIdle(self) #NFX
+        nfxFire.OnIdle(self) #NFX
 
     def Init(self):
 
@@ -1060,7 +1060,7 @@ class TFire():
 
     def OnMidiMsg(self, event):
 
-        nfxFireUtils.OnMidiMsg(self, event) #NFX
+        nfxFire.OnMidiMsg(self, event) #NFX
 
         tempHeldPads = bytearray()
         ParamNames = ('Step pitch', 'Velocity', 'Release', 'Fine pitch', 'Panning', 'Mod X', 'Mod Y', 'Shift')
@@ -1554,7 +1554,7 @@ class TFire():
                                 m = self.GetFPCNoteValue(event.data1)
 
                                 if m >= 0:
-                                    nfxRes = nfxFireUtils.HandleFPCPress(self, event, m) #NFX
+                                    nfxRes = nfxFire.OnFPCPadPress(self, event, m) #NFX
                                     event.data1 = m
                                     if event.midiId == MIDI_NOTEON:
                                         self.PlayingNotes.append(event.data1)
@@ -1564,7 +1564,7 @@ class TFire():
                                     return
                                 else:
                                     #print('nfx')
-                                    nfxFireUtils.HandlePadPress(self, event) #NFX
+                                    nfxFire.OnPadPress(self, event) #NFX
                                     event.handled = True
                                     return #: nothing
                             elif self.CurrentDrumMode == DrumModeSlicex:

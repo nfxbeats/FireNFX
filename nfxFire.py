@@ -113,6 +113,7 @@ _lastPattern = -1
 _RepeatNote = False
 _IsRepeating = False
 _IsActivating = False
+_IsActive = False 
 # lists of things
 _Macros = list()
 _PadMaps = list()
@@ -161,6 +162,8 @@ def BuildMixers():
 
 def BuildChannels():
     global _Channels
+    _Channels.clear()
+    
     #print ("...channels...")
     # Build a list of FL patterns
     chanCount = channels.channelCount()
@@ -178,6 +181,9 @@ def BuildChannels():
 def BuildPatterns():
     global _Patterns
     global _drumMixerTrk
+    
+    _Patterns.clear()
+
 
     #print ("...patterns...")
     # Build a list of FL patterns
@@ -374,7 +380,9 @@ def isModeUser2():
 
 def isAllowed():
     # todo check some other things like number of tracks, etc...
-    return _Fire.CurrentDrumMode == device_Fire.DrumModeFPC
+    val = (_Fire.CurrentDrumMode == device_Fire.DrumModeFPC) and (_IsActive == True)
+    #print('isAllowed', val) 
+    return val 
 
 
 def ShowPianoRoll(showVal):
@@ -452,21 +460,38 @@ def ShowChannelEditor(showVal):
 
 
 def OnInit(fire):
+    Update_Fire(fire)
 
-    # initial value for now...
-    _snapIdx = defs.SnapModesList[defs._initialSnapIndex]
+    if(isAllowed()):
+        # initial value for now...
+        _snapIdx = defs.SnapModesList[defs._initialSnapIndex]
 
-    # set the default modes for my own preference
-    fire.CurrentMode = device_Fire.ModeDrum
-    #print('SnapModes', SnapModesList, SnapModesList[_snapIdx])
-    setSnapMode(_snapIdx)
-
-    if(not isAllowed()):
-        return
-
-    InitAll(fire)
+        # set the default modes for my own preference
+        # todo: store these somewhere
+        fire.CurrentMode = device_Fire.ModeDrum
+        setSnapMode(_snapIdx)
+        InitAll(fire)
+        RefreshFirePads(fire, False) #forece refresh 
 
 # called from TFire.OnIdle
+
+def OnFPCPadPress(fire, event, m):
+    Update_Fire(fire)
+
+    # this is so I can consistently only call OnXXXXXX functions from device_Fire
+    #as well as do the isAllowed check.
+    if(isAllowed()):
+        return HandleFPCPress(fire, event, m) 
+    else:
+        return False 
+
+def OnPadPress(fire, event):
+    Update_Fire(fire)
+
+    # this is so I can consistently only call OnXXXXXX functions from device_Fire
+    #as well as do the isAllowed check.
+    if(isAllowed()):  
+        HandlePadPress(fire, event)
 
 
 def OnIdle(fire):
@@ -529,12 +554,10 @@ def OnIdle(fire):
 def OnMidiMsg(fire, event):
     global _IsRepeating
     global _RepeatNote
+    global _IsActive 
     origevent = event
     wasHandled = False
-    Update_Fire(fire)
-
-    if(not isAllowed()):
-        return
+    Update_Fire(fire)    
 
     if event.midiId in [MIDI_NOTEON, MIDI_NOTEOFF]:
         if (event.data1 >= device_Fire.PadFirst) & (event.data1 <= device_Fire.PadLast):
@@ -545,12 +568,24 @@ def OnMidiMsg(fire, event):
             if (event.midiId == MIDI_NOTEON):
                 print('MidiMsg.PadOn=', PadIndex)
 
+                if(fire.AltHeld) and (PadIndex == 56):
+                    _IsActive = not _IsActive 
+                    print('_IsActive', _IsActive, _Fire.CurrentDrumMode, device_Fire.DrumModeFPC)
+                    
+                    if(isAllowed() == True):
+                        print('initiing')
+                        OnInit(fire)
+                        RefreshFirePads(fire, True)
+                    #todo de-init?    
+
             if (event.midiId == MIDI_NOTEOFF):
                 print('MidiMsg.PadOff=', PadIndex)
 
             event.handled = wasHandled
 
-        RefreshFirePads(fire, False)
+        if(isAllowed()):
+            Update_Fire(fire)
+            RefreshFirePads(fire, False)
 
 # endregion
 
@@ -558,6 +593,7 @@ def OnMidiMsg(fire, event):
 
 
 def RefreshProgress(fire):
+    Update_Fire(fire)
     if not isAllowed():
         return
 
@@ -566,6 +602,7 @@ def RefreshProgress(fire):
 
 
 def RefreshSongPos(fire):
+    Update_Fire(fire)
     if not isAllowed():
         return
 
@@ -593,8 +630,9 @@ def RefreshSongPos(fire):
 
 def RefreshPatternPads(fire):
     global _Patterns
-    if not isAllowed():
-        return
+    Update_Fire(fire)
+#    if not isAllowed():
+#        return
     # Pattern Pads -- top row
     for trk in defs.PatternChannels:  # list of 8 channels, 1...8
         patIdx = trk - 1  # 0 based
@@ -616,12 +654,13 @@ def RefreshPatternPads(fire):
 
 def RefreshFirePads(fire, clearfirst):
     # print('ShowMacroButtons')
-    if not isAllowed():
-        return
+    Update_Fire(fire)
+#    if not isAllowed():
+#        return
 
     if(clearfirst):
         for p in range(0, 63):
-            nfxSetFIRELED(fire, p, cOff, 0)
+            nfxSetFIRELEDCol(fire, p, cOff, 0)
 
     if (True):  # Default PAT/GRID on
         # default these lights to ON
@@ -653,6 +692,7 @@ def RefreshFirePads(fire, clearfirst):
 
 
 def RefreshFPCPads(fire):
+    Update_Fire(fire)
     if not isAllowed():
         return
 
@@ -681,7 +721,7 @@ def RefreshChannelPads(fire):
     global LoopSizes
     global _Patterns
     global _lsLen1
-
+    Update_Fire(fire)
     if not isAllowed():
         return
 
@@ -769,6 +809,7 @@ def GetScaleGrid(rootNote=0, startOctave=2, scale=HARMONICSCALE_MINORPENTATONIC)
 
 def RefreshMacroPads(fire):
     # Macro Pads - Third row
+    Update_Fire(fire)
     if not isAllowed():
         return
 
@@ -800,6 +841,7 @@ def HandleFPCPress(fire, event, m):
     global _RepeatNote
     global _IsRepeating
     wasHandled = False
+
     chan = channels.channelNumber()
     # print("---------------------------")
     #print('HandleFPCPress', event.data1, event.data2, m)
