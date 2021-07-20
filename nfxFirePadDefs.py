@@ -32,6 +32,11 @@ SnapModesList = [Snap_Beat, Snap_HalfBeat, Snap_ThirdBeat, Snap_Step, Snap_HalfS
 _initialSnapIndex = 1 #initial value - index of above
 _initialSnap = SnapModesList[_initialSnapIndex]
 
+#define the list of velocities
+VelocityList = [80, 96, 112, 120, 128]
+_initialVelocityIndex = 3 #initial value - index of above
+_initialVelocity = VelocityList[_initialVelocityIndex]
+
 
 #define the pads to use for macros and their colors and names
 MacroPads = [40, 41, 42, 43, 44, 45, 46, 47]

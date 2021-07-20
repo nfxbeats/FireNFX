@@ -47,7 +47,6 @@ class TnfxChannel:
         self.LoopSize = 0
         self.Muted = 0
 
-
 class TnfxPattern:
     def __init__(self):
         self.Name = ""
@@ -59,7 +58,6 @@ class TnfxPattern:
         self.ShowPianoRoll = 0
         self.ShowChannelSettings = 0
         self.Color = cOff
-
 
 class TnfxPadMap:
     def __init__(self):
@@ -78,7 +76,6 @@ class TnfxPadMap:
         self.FLColor = 0x000000     # the color that looks like above color best in FL
         self.MIDINote = -1          # the midi Note for this pad
         self.IsRootNote = False
-
 
 class TnfxMacro:
     def __init__(self):
@@ -113,6 +110,8 @@ _Channels = list()
 _Mixers = list()
 _MutedTracks = list()
 _snapIdx = 0
+_velIdx = 0
+_velocity = 120
 
 # snap defs are in MIDI.py aka Snap_Cell, Snap_line, etc
 _snapModes = ["Default", "Line", "?", "Cell", "None",
@@ -284,7 +283,9 @@ def MuteMixerTrack(trk, newVal=-1):
 
 
 def MutePlaylistTrack(pltrk, newVal=-1):
+    global _selectedPattern
     currVal = 0
+    currPat = _selectedPattern 
     if (playlist.isTrackMuted(pltrk)):
         currVal = 1
 
@@ -302,7 +303,7 @@ def MutePlaylistTrack(pltrk, newVal=-1):
     # playlist and thus it will cut or start the notes better.
     # unfortunately it takes longer because it sets the pattern twice
     patterns.jumpToPattern(-1)
-    patterns.jumpToPattern(pltrk)
+    patterns.jumpToPattern(_selectedPattern)
 
 
 def getColorFromFL(FLColor):
@@ -449,6 +450,7 @@ def ShowChannelEditor(showVal):
 
 # call this from the end of TFire.OnInit
 def OnInit(fire):
+    _velocity = defs._initialVelocity
     Update_Fire(fire)
 
     if(isAllowed()):
@@ -848,7 +850,7 @@ def HandleFPCPress(fire, event, m):
         # print('.......FPC', event.data1, 'PadIdx', padIdx,'m', m,  'Note', note,
         #   'MIDINote', _PadMaps[padIdx].MIDINote, 'RPT:', _RepeatNote, rptTime)
 
-        channels.midiNoteOn(chan, note, 120)
+        channels.midiNoteOn(chan, note, _velocity)
 
         if(_RepeatNote) and (not _IsRepeating):
             _IsRepeating = True
@@ -971,6 +973,8 @@ def HandleMacros(fire, event, PadIndex):
     global _RepeatNote
     global _IsRepeating
     global _snapIdx
+    global _velIdx
+    global _velocity 
 
     # check if a macro pad is pressed
     if PadIndex in defs.MacroPads:
@@ -1001,7 +1005,6 @@ def HandleMacros(fire, event, PadIndex):
             if(_snapIdx > len(defs.SnapModesList) - 1):
                 _snapIdx = 0
             setSnapMode(defs.SnapModesList[_snapIdx])
-#            transport.globalTransport(FPT_Snap, 48) #snap toggle
         if MacroIndex == 4:
             ClearMidi(fire)
         if MacroIndex == 5:
@@ -1011,7 +1014,14 @@ def HandleMacros(fire, event, PadIndex):
             else:
                 ResetUI(fire)
         if MacroIndex == 6:
-            GetScaleGrid(0, 3, HARMONICSCALE_BLUES)
+            _velIdx += 1
+            if(_velIdx > len(defs.VelocityList) - 1):
+                _velIdx = 0
+            _velocity = defs.VelocityList[_velIdx]               
+            val = str(_velocity)
+            _Fire.DisplayTimedText('Velocity: ' + val )
+            #GetScaleGrid(0, 3, HARMONICSCALE_BLUES)
+
         if MacroIndex == 7:
             if(fire.AltHeld):
                 OnInit(fire)
@@ -1164,6 +1174,8 @@ def Update_Fire(fire):
 
 
 def ResetUI(fire):
+    global _selectedPattern 
+
     fire.DisplayTimedText("Reset UI...")
     transport.globalTransport(FPT_F12, 1)  # close all...
     ui.showWindow(widMixer)
@@ -1177,11 +1189,7 @@ def ResetUI(fire):
     ui.showWindow(widChannelRack)
     # todo: bring up any other windows.. ie control surface, etc
 
-    # open the piano roll
-    chan = channels.selectedChannel(0, 0, 1)
-    ui.openEventEditor(channels.getRecEventId(
-        chan) + REC_Chan_PianoRoll, EE_PR)
-    ui.showWindow(widPianoRoll)
+    ActivatePattern(_selectedPattern)
 
 
 def ClearMidi(fire):
