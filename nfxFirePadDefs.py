@@ -27,21 +27,10 @@ _lsLen1 = 32
 _lsLen2 = 64
 _lsLen3 = 96
 
-#define your list of snap modes to cycle through.
-SnapModesList = [Snap_Beat, Snap_HalfBeat, Snap_ThirdBeat, Snap_Step, Snap_HalfStep, Snap_ThirdStep, Snap_None]
-_initialSnapIndex = 1 #initial value - index of above
-_initialSnap = SnapModesList[_initialSnapIndex]
-
-#define the list of velocities
-VelocityList = [80, 96, 112, 120, 128]
-_initialVelocityIndex = 3 #initial value - index of above
-_initialVelocity = VelocityList[_initialVelocityIndex]
-
-
 #define the pads to use for macros and their colors and names
 MacroPads = [40, 41, 42, 43, 44, 45, 46, 47]
-MacroColors = [cGreen,     cMagenta, cOrange, cBlue, cRed,        cYellow,        cCyan, cOrange]
-MacroNames = ['Save Undo', 'Undo',   'Repeat', 'Snap Cycle', 'Clear MIDI', 'Reset UI/ALL', 'Blues Scale', 'Re-INIT']
+MacroColors = [cWhite, cWhite, cCyan, cMagenta, cRed, cDimWhite, cDimWhite, cBlueDark]
+MacroNames = ['', '',   '', '', '', '', '', '']
 
 #these define the pads to use for the progress indicator
 ProgressPads = [56, 57, 58, 59, 60, 61, 62, 63]
@@ -59,6 +48,11 @@ FPC_BPads = [4, 5, 6, 7,
              20, 21, 22, 23,
              36, 37, 38, 39, 
              52, 53, 54, 55]
+
+Perf_Pads = [0,1,2,3, 4, 5, 6, 7,
+             16, 17, 18, 19, 20, 21, 22, 23,
+             32, 33, 34, 35, 36, 37, 38, 39, 
+             48, 49, 50 , 51, 52, 53, 54, 55]
 
 # color scheme for my default kit
 FPC_APadColors = [cPurple, cPurple, cYellow, cYellow,
