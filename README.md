@@ -1,5 +1,14 @@
-# AKAI-Fire-NFX
-#
-FireNFX is a project to enhance the existing AKAI Fire functionality with easy to use MIDI Looper style helper functions. As such, many of these features are already available to AKAI Fire users, except not all in one place and not designed with MIDI looping in mind.
+# AKAI-Fire-NFX v0.0 pre-release
+This project adds functionality to the FL Studio AKAI Fire MIDI script to give it a MIDI Looper style ability.
 
-Please see the "FireNFX Documentation v0.0.PDF" for details on installation and usage.
+Please see <> for installation walktrhough.
+
+Please see <> for usage instructions.
+
+Please report any bugs/issues to me in the FL Studio forums at <> or on  my reddit at <>
+
+# IMPORTANT!
+NOTE: This is pre-release and will have bugs. Please do not use in a production setting.
+
+# TODO
+I plan to make an installer for windows using INNO Script.
