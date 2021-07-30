@@ -120,17 +120,20 @@ _snapModes = ["Default", "Line", "?", "Cell", "None",
 
 #define your list of snap modes to cycle through.
 SnapModesList = [Snap_Beat, Snap_HalfBeat, Snap_ThirdBeat, Snap_Step, Snap_HalfStep, Snap_ThirdStep, Snap_None]
-_initialSnapIndex = 1 #initial value - index of above
+_initialSnapIndex = 1 #initial value - index of above - 0-based
+_repeatSnapIdx = 4 # for repeat mode
 _initialSnap = SnapModesList[_initialSnapIndex]
+_repeatSnap = SnapModesList[_repeatSnapIdx]
 _snapIdx = _initialSnapIndex
 
 #define the list of velocities
 VelocityList = [80, 96, 112, 120, 128]
 VelocityColors = [cWhite, cGreen, cYellow, cOrange, cRed]
-_initialVelocityIndex = 3 #initial value - index of above
+_initialVelocityIndex = 3 #initial value - index of above - 0-based
 _initialVelocity = VelocityList[_initialVelocityIndex]
 _velIdx = _initialVelocityIndex
 _velocity = VelocityList[_velIdx]   
+_velocityoff = -1
 
 NotesList = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
 
@@ -507,9 +510,9 @@ def ToggleRepeat():
     if(not _RepeatNote):
         device.stopRepeatMidiEvent()
         _IsRepeating = False
-        setSnapMode(Snap_Step)
+        setSnapMode(SnapModesList[_snapIdx])
     else:
-        setSnapMode(_snapIdx)
+        setSnapMode(SnapModesList[_snapIdx])
 
 def NextRootNote():
     global _faveNoteIdx
@@ -535,17 +538,10 @@ def NextMode():
 
 # call this from the end of TFire.OnInit
 def OnInit(fire):
-    _velocity = _initialVelocity
+    
     Update_Fire(fire)
 
     if(isAllowed()):
-        # initial value for now...
-        _snapIdx = SnapModesList[_initialSnapIndex]
-
-        # set the default modes for my own preference
-        # todo: store these somewhere
-        fire.CurrentMode = device_Fire.ModeDrum
-        setSnapMode(_snapIdx)
         InitAll(fire)
         RefreshFirePads(fire, False) #forece refresh 
 
@@ -641,8 +637,11 @@ def OnMidiMsg(fire, event):
             if (event.midiId == MIDI_NOTEON):
                 #print('MidiMsg.PadOn=', PadIndex)
 
+                #toggle active state
                 if(fire.AltHeld) and (PadIndex == 56):
                     _IsActive = not _IsActive 
+                    if(not _IsActive):
+                        fire.CurrentMode = device_Fire.ModeStepSeq
                     
                     if(isAllowed() == True):
                         OnInit(fire)
@@ -982,7 +981,7 @@ def HandleFPCPress(fire, event, m):
             event.handled = True
     else:
         #print('FPC', event.data1, 'OFF', _RepeatNote)
-        channels.midiNoteOn(chan, note, 0)
+        channels.midiNoteOn(chan, note, _velocityoff)
         if(_RepeatNote) and (_IsRepeating):
             _IsRepeating = False
             device.stopRepeatMidiEvent()
@@ -1489,11 +1488,22 @@ def RecolorPatterns():
 
 
 def InitAll(fire):
+    global _snapIdx
+    global _velIdx
     # show the banner....
+    print(" ")
     print("_______________nfxFIRE v 0.0.pre-alpha - warbeats.com_______________")
     _Fire.DisplayTimedText("nfxFIRE v0.0...")
     print('...Initializing')
     Update_Fire(fire)
+    # initial value for now...
+    _snapIdx = _initialSnapIndex
+    _velIdx = _initialVelocityIndex
+
+    # set the default modes for my own preference
+    # todo: store these somewhere
+    fire.CurrentMode = device_Fire.ModeDrum
+    setSnapMode(SnapModesList[_snapIdx])
 
     # read the FL tracks info...
     lastknobmode = fire.CurrentKnobsMode
