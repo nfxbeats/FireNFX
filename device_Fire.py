@@ -1,4 +1,5 @@
-﻿#   name=AKAI FL Studio Fire NFX
+﻿# name=FireNFX
+# this is a modified version of the Image-Line script:
 # url=https://forum.image-line.com/viewtopic.php?p=1496543#p1496543
 # receiveFrom=AKAI FL Studio Fire
 
@@ -979,6 +980,7 @@ class TFire():
             if (event.status & 0xF0) in [MIDI_NOTEON, MIDI_NOTEOFF]:
                 if not self.TranslateNote(event):
                     event.handled = False #todo
+                    nfxFire.OnMidiIn(self, event)
                     return
             if event.status == 0xF4:
 
@@ -1755,8 +1757,17 @@ class TFire():
                             self.DisplayTimedText(ui.getFocusedNodeCaption())
                             if nodeFileType <= -100:
                                 transport.globalTransport(FPT_Enter, 1, PME_System | PME_FromMIDI) # expand/collapse folder
+
                             else:
                                 ui.selectBrowserMenuItem()
+
+                                # nfx added the following lines
+                                ui.down()
+                                if(self.ShiftHeld):
+                                    ui.down()
+                                ui.enter()
+                                #
+
 
                         elif ((self.CurrentMode == ModeNotes) | (self.CurrentMode == ModeDrum)) & self.JogWheelPushed & (channels.channelNumber(True) >= 0):
                             self.LayoutSelectionMode = not self.LayoutSelectionMode
@@ -2122,19 +2133,20 @@ class TFire():
                 n = 4
             else:
                 n = 0
-            for x in range(0, PadsW):
-                for y in range(0, PadsH):                   
-                    if (x + n) in range(4, 12):
-                        if (playingNote >= 0) & (self.GetFPCNoteValue((x + n) + y * PadsStride) == playingNote):
-                            AddPadDataRGB2(x, y, colors[1]) # playing note (from FL)
-                        elif self.PlayingNotes.find(self.GetFPCNoteValue((x + n) + y * PadsStride)) >= 0:
-                            AddPadDataRGB2(x, y, colors[2]) # playing note (by the user)
-                        elif (x + n) < 8:
-                            AddPadDataRGB2(x, y, colors[3]) # default pad color - bank A
+            if(not nfxFire.OnRefreshPlayback(self, playingNote)): #if nfxFire function fails, revert to old behavior
+                for x in range(0, PadsW):
+                    for y in range(0, PadsH):                   
+                        if (x + n) in range(4, 12):
+                            if (playingNote >= 0) & (self.GetFPCNoteValue((x + n) + y * PadsStride) == playingNote):
+                                AddPadDataRGB2(x, y, colors[1]) # playing note (from FL)
+                            elif self.PlayingNotes.find(self.GetFPCNoteValue((x + n) + y * PadsStride)) >= 0:
+                                AddPadDataRGB2(x, y, colors[2]) # playing note (by the user)
+                            elif (x + n) < 8:
+                                AddPadDataRGB2(x, y, colors[3]) # default pad color - bank A
+                            else:
+                                AddPadDataRGB2(x, y, colors[4]) # default pad color - bank B
                         else:
-                            AddPadDataRGB2(x, y, colors[4]) # default pad color - bank B
-                    else:
-                        AddPadDataRGB2(x, y, colors[0]) # unused pad
+                            AddPadDataRGB2(x, y, colors[0]) # unused pad
         elif self.CurrentDrumMode == DrumModeSlicex:
             for x in range(0, PadsW):
                 for y in range(0, PadsH):

@@ -1,4 +1,4 @@
-# name= Akai FireNFX
+# name=FireNFX Utils
 #
 # yes this code is messy and redundant on places. its in a constant state of refactor
 # and development. get used to it ;)
@@ -543,7 +543,29 @@ def OnInit(fire):
 
     if(isAllowed()):
         InitAll(fire)
+        ActivatePattern(1)
         RefreshFirePads(fire, False) #forece refresh 
+
+def OnRefreshPlayback(fire, playingNote):
+    Update_Fire(fire)
+
+    if(not isAllowed()):
+        return False
+
+    if(_showFPCColors):
+        return False
+
+    if( (playingNote >= 0) or (len(fire.PlayingNotes) > 0) ):
+        #print('OnPlayback', playingNote, fire.PlayingNotes)
+        #print('OnPlayback Notes:', playingNote, fire.PlayingNotes)
+
+        #for pad in _PadMaps:
+        #    if (pad.MIDINote == playingNote):
+        #        print('OnPlayback Pad:', pad.PadIndex)
+                #nfxSetFIRELEDCol(fire, pad.PadIndex, cYellow, 0)
+        return True #if True, will not run default coe in device_Fire
+    else:
+        return False 
 
 # called from TFire.OnIdle
 def OnFPCPadPress(fire, event, m):
@@ -563,6 +585,12 @@ def OnPadPress(fire, event):
     #as well as do the isAllowed check.
     if(isAllowed()):  
         HandlePadPress(fire, event)
+
+
+def OnMidiIn(fire, event):
+    Update_Fire(fire)
+    if(isAllowed()):
+        print("Midi-In:", event.data1, event.data2, fire.LastRawData1, fire.LastRawData2)
 
 # call from TFire.OnIdle
 def OnIdle(fire):
@@ -641,7 +669,9 @@ def OnMidiMsg(fire, event):
                 if(fire.AltHeld) and (PadIndex == 56):
                     _IsActive = not _IsActive 
                     if(not _IsActive):
+                        wasHandled = True 
                         fire.CurrentMode = device_Fire.ModeStepSeq
+                        fire.CurrentMode = device_Fire.DrumModeFPC
                     
                     if(isAllowed() == True):
                         OnInit(fire)

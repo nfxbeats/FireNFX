@@ -33,6 +33,7 @@ Name: "InstallTemplates"; Description: "Install Example FireNFX Templates"; Type
 
 [Tasks]
 Name: "StartFireNFXTemplate"; Description: "Start FL Studio with the demo FireNFX Template"
+Name: "CopyLatestVersion"; Description: "Copies the latest version downloaded from github to a folder"; Components: InstallScripts
 
 [Messages]
 WizardSelectDir=Select your FL Studio User Data Folder
@@ -64,13 +65,25 @@ begin
     Result := V;
 end;
 
-
-function InitializeSetup(): Boolean;
-var
-  V: string;
+function OnDownloadProgress(const Url, Filename: string; const Progress, ProgressMax: Int64): Boolean;
 begin
-//todo: verify correect FL Version
-  Result := TRUE;
+  if ProgressMax <> 0 then
+    Log(Format('  %d of %d bytes done.', [Progress, ProgressMax]))
+  else
+    Log(Format('  %d bytes done.', [Progress]));
+  Result := True;
+end;
+
+function InitializeSetup: Boolean;
+begin
+  try
+    DownloadTemporaryFile('https://github.com/nfxbeats/FireNFX/archive/refs/heads/master.zip', 'nfxFire.zip', '', @OnDownloadProgress);
+    Result := True;
+    MsgBox('Hello. ' + ExpandConstant('{tmp}'), mbInformation, MB_OK);
+  except
+    Log(GetExceptionMessage);
+    Result := False;
+  end;
 end;
 
 
