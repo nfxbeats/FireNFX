@@ -79,11 +79,9 @@ begin
   try
     DownloadTemporaryFile('https://github.com/nfxbeats/FireNFX/archive/refs/heads/master.zip', 'nfxFire.zip', '', @OnDownloadProgress);
     Result := True;
-    MsgBox('Hello. ' + ExpandConstant('{tmp}'), mbInformation, MB_OK);
+    //MsgBox('Hello. ' + ExpandConstant('{tmp}'), mbInformation, MB_OK);
   except
     Log(GetExceptionMessage);
     Result := False;
   end;
 end;
-
-
