@@ -865,10 +865,10 @@ def RefreshFPCPads(fire):
                 col = cBlueMed
             
             if(_PadMaps[p].ChordNum == 8):
-                col = cBlueDark
+                col = cPurple
                 if(_Chord7th):
-                    col = cBlueLight
-                    dim = 0
+                    col = cPurpleLight
+                    dim = 1
                 
                     
 
@@ -1145,34 +1145,33 @@ def HandleFPCPress(fire, event, m):
 
     if event.midiId == MIDI_NOTEON:
 
-        if(0 < chord < 8):
-            _ChordNum = chord 
-        
         if (chord == 8): #toggle
             _Chord7th = not _Chord7th
 
-        #if (chord == 8): #invert
-        if(fire.AltHeld):
-            _ChordInvert = True
+        if(0 < chord < 8): #chord
 
-        # root note, always play when not 7th or inv (8)
-        if (chord < 8):
-            channels.midiNoteOn(chan, note, _velocity)
+            _ChordNum = chord 
 
-        if(_ChordNum > 0): #chord?
-            #print('ScaleNotes', _ScaleNotes)
-            #print('Chord', _ChordNum, 'Root', note, '3rd:', note3, '5th:', note5, '7th:', note7, 'Play7?', _Chord7th, 'Inv:', _ChordInvert)
-            #3
-            channels.midiNoteOn(chan, note3, _velocity)
-            #5
-            if(_ChordInvert):
-                channels.midiNoteOn(chan, note5inv, _velocity) 
-            else:
-                channels.midiNoteOn(chan, note5, _velocity) 
-            #7
-            if (_Chord7th): #7th
-                channels.midiNoteOn(chan, note7, _velocity)
+            if(fire.AltHeld):
+                _ChordInvert = True
 
+            HandleChord(chan, _ChordNum, True, _Chord7th, _ChordInvert)
+
+            if(False):
+                #print('ScaleNotes', _ScaleNotes)
+                #print('Chord', _ChordNum, 'Root', note, '3rd:', note3, '5th:', note5, '7th:', note7, 'Play7?', _Chord7th, 'Inv:', _ChordInvert)
+                #3
+                channels.midiNoteOn(chan, note3, _velocity)
+                #5
+                if(_ChordInvert):
+                    channels.midiNoteOn(chan, note5inv, _velocity) 
+                else:
+                    channels.midiNoteOn(chan, note5, _velocity) 
+                #7
+                if (_Chord7th): #7th
+                    channels.midiNoteOn(chan, note7, _velocity)
+        else:
+            channels.midiNoteOn(chan, note, _velocity) #single note
                 
         # print('.......FPC', event.data1, 'PadIdx', padIdx,'m', m,  'Note', note,
         #   'MIDINote', _PadMaps[padIdx].MIDINote, 'RPT:', _RepeatNote, rptTime)
@@ -1187,27 +1186,12 @@ def HandleFPCPress(fire, event, m):
             device.repeatMidiEvent(event, rptTime, rptTime)
             event.handled = True
     else:
-        HandleChord(chan, chord, False, _Chord7th, _ChordInvert)
+               
+        if (0 < chord < 8):
+            HandleChord(chan, chord, False, _Chord7th, _ChordInvert)
+        else:
+            channels.midiNoteOn(chan, note, _velocityoff) # SINGLE NOTE
 
-        if(False):        
-            # root note, always play when not 7th or inv (8)
-            if (chord < 8):
-                channels.midiNoteOn(chan, note, _velocityoff)
-
-            if(_ChordNum > 0): 
-                #3
-                channels.midiNoteOn(chan, note3, _velocityoff)
-                #5
-                if (_ChordInvert):
-                    channels.midiNoteOn(chan, note5inv, _velocityoff) 
-                else:
-                    channels.midiNoteOn(chan, note5, _velocityoff) 
-                #7
-                if(_Chord7th):
-                    channels.midiNoteOn(chan, note7, _velocityoff)
-                
-                _ChordNum = -1 #reset the chord
-                _ChordInvert = False 
 
         #print('FPC', event.data1, 'OFF', _RepeatNote)
         if(_RepeatNote) and (_IsRepeating):
@@ -1366,10 +1350,10 @@ def HandleMacros(fire, event, PadIndex):
 
         if MacroIndex == 5:
             if(fire.AltHeld):
-                RecolorPatterns()
+                #RecolorPatterns()
                 OnInit(fire)
             else:
-                ui.paste()
+                SetAllMutes(0) # OFF
         
         if MacroIndex == 6:
             SetAllMutes(1) # ON
@@ -1461,6 +1445,8 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
     print("           Channel:", str(nfxPat.Channel.FLIndex) + "-" +  nfxPat.Channel.Name)
     print("            Mixer: ", str(nfxPat.Mixer.FLIndex) + "-" +  nfxPat.Mixer.Name)
     print("             Scale:", _ScaleInfo)
+
+    Fire.DisplayTimedText(_ScaleInfo)
 
     patterns.jumpToPattern(nfxPat.FLIndex)
     _selectedPattern = nfxPat.FLIndex
