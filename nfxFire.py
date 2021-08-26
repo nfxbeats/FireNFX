@@ -318,14 +318,14 @@ def getMixerTrackForChannel(chan):
     return channels.getTargetFxTrack(chan)
 
 
-def GetTempoDiv(div):
-    tempo = mixer.getCurrentTempo(0) / 1000
-    beat = 60/tempo * 1000
-    halfbeat = 30/tempo * 1000
-    step = 15/tempo * 1000
-    halfstep = 7.5/tempo * 1000
-    divs = [beat, halfbeat, step, halfstep]
-    return divs[div]
+def GetBeatLenInMS(div):
+    tempo = mixer.getCurrentTempo(0)
+    beatlen = (60000/tempo)
+    #print('tempo', tempo, beatlen)
+    if(div > 0 ):
+        return beatlen/div # (1beat)/div  so div = 2 is half etc...
+    else: #when div = 0...
+        return  beatlen * 4 # one bar
 
 def MuteMixerTrack(trk, newVal=-1):
     global _Patterns
@@ -663,7 +663,7 @@ def OnIdle(fire):
         RefreshMacroPads(fire)
 
     _nfxBlinkTimer += 1
-    _nfxBlinkSpeed = GetTempoDiv(0)/32
+    _nfxBlinkSpeed = 30 # GetBeatLenInMS(0)
 
     if _nfxBlinkTimer >= _nfxBlinkSpeed:
         _nfxBlinkTimer = 0
@@ -1133,7 +1133,7 @@ def HandleFPCPress(fire, event, m):
     #
     vel = event.data2
     tdiv = 3
-    rptTime = int(GetTempoDiv(tdiv))
+    rptTime = int(GetBeatLenInMS(tdiv))
 
     if(_showFPCColors):
         note = m
