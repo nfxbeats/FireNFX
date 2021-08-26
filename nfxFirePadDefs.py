@@ -25,7 +25,7 @@ _cpShowCS = 7
 # define the length of the pattern sizes.
 _lsLen1 = 32
 _lsLen2 = 64
-_lsLen3 = 96
+_lsLen3 = 128
 
 #define the pads to use for macros and their colors and names
 MacroPads = [40, 41, 42, 43, 44, 45, 46, 47]

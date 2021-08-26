@@ -1147,8 +1147,7 @@ def HandleFPCPress(fire, event, m):
 
         if (chord == 8): #toggle
             _Chord7th = not _Chord7th
-
-        if(0 < chord < 8): #chord
+        elif(0 < chord < 8): #chord
 
             _ChordNum = chord 
 
@@ -1448,6 +1447,9 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
 
     Fire.DisplayTimedText(_ScaleInfo)
 
+    if(nfxPat.Muted == 1) and (transport.isRecording()): #do not allow muted channels when recordining 
+        MutePlaylistTrack(nfxPat.FLIndex, 0)
+
     patterns.jumpToPattern(nfxPat.FLIndex)
     _selectedPattern = nfxPat.FLIndex
     
@@ -1480,11 +1482,10 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
     RefreshFPCPads(_Fire)
 
         
-    if(showPlugin):
+    if(showPlugin): #when false show NO windows
         ui.showWindow(widPlugin)  # wid was missing from midi.py
-
-    ShowChannelEditor(nfxPat.ShowChannelEditor)
-    ShowPianoRoll(nfxPat.ShowPianoRoll)
+        ShowChannelEditor(nfxPat.ShowChannelEditor)
+        ShowPianoRoll(nfxPat.ShowPianoRoll)
 
     _IsActivating = False
 
@@ -1594,7 +1595,7 @@ def ClearMidi(fire):
         pNow = _selectedPattern
         patcount = patterns.patternCount()
         for p in range(1, patcount+1):
-            ActivatePattern(p)
+            ActivatePattern(p, False, True)
             ClearPattern()
     else:
         #print('Clearing Pattern')
