@@ -64,8 +64,8 @@ FPC_BPadColors = [cGreen, cGreen, cGreen, cGreen,
                   cSilver, cSilver, cSilver, cSilver,
                   cOrange, cOrange, cOrange, cOrange]  
 
-# used to unencode the translation, so when we repeat not it sends the untralslated value
-# if I didnt do this, the note would get re-translated into the wrong note.
+# arrays are used to unencode the translation, so when we do a "repeat note" it sends the untranslated value
+# if I didnt do this, the note would get re-translated into the wrong note. 
 # im sure there is a better way but my brain is tired.
 _PAD_Notes = [52, 53, 54, 55, 56, 57, 58, 59, 
               36, 37, 38, 39, 40, 41, 42, 43, 

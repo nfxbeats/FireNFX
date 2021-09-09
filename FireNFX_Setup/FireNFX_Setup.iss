@@ -26,14 +26,16 @@ Source: "..\nfxFirePadDefs.py"; DestDir: "{app}"; Flags: ignoreversion; Componen
 Source: "..\utils.py"; DestDir: "{app}"; Flags: ignoreversion; Components: InstallScripts
 Source: "..\nfxFire_Template.zip"; DestDir: "{code:FLSharedFolder}\FL Studio\Projects\Templates\FireNFX"; Flags: ignoreversion; Components: InstallTemplates
 Source: "..\nfxFire_Template_2.zip"; DestDir: "{code:FLSharedFolder}\FL Studio\Projects\Templates\FireNFX"; Flags: ignoreversion; Components: InstallTemplates
+Source: "{tmp}\nfxFire.zip"; DestDir: "{app}"; Flags: confirmoverwrite skipifsourcedoesntexist; Components: InstallGitHub
 
 [Components]
 Name: "InstallScripts"; Description: "Install the FireNFX Scripts"; Types: compact custom full; Flags: checkablealone
 Name: "InstallTemplates"; Description: "Install Example FireNFX Templates"; Types: custom full; Flags: checkablealone
+Name: "InstallGitHub"; Description: "Installs the absolute latest version from GitHub."
 
 [Tasks]
 Name: "StartFireNFXTemplate"; Description: "Start FL Studio with the demo FireNFX Template"
-Name: "CopyLatestVersion"; Description: "Copies the latest version downloaded from github to a folder"; Components: InstallScripts
+Name: "CopyLatestVersion"; Description: "Update to the latest  available version."
 
 [Messages]
 WizardSelectDir=Select your FL Studio User Data Folder
