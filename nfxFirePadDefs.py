@@ -49,6 +49,10 @@ FPC_BPads = [4, 5, 6, 7,
              36, 37, 38, 39, 
              52, 53, 54, 55]
 
+#these define the FL Studio index running from bottom left to top right for the A Pads and B Pads separately
+FPC_APads_FL = [48, 49, 50, 51, 32, 33, 34, 35, 16, 17, 18, 19, 0, 1, 2, 3]
+FPC_BPads_FL = [52, 53, 54, 55, 36, 37, 38, 39, 20, 21, 22, 23, 4, 5, 6, 7]
+
 Perf_Pads = [0,1,2,3, 4, 5, 6, 7,
              16, 17, 18, 19, 20, 21, 22, 23,
              32, 33, 34, 35, 36, 37, 38, 39, 

@@ -117,7 +117,7 @@ _Channels = list()
 _Mixers = list()
 #_MutedTracks = list()
 _ScaleNotes = list()
-
+_playingNote = -1
 
 # snap defs are in MIDI.py aka Snap_Cell, Snap_line, etc
 _snapModes = ["Default", "Line", "?", "Cell", "None",
@@ -580,6 +580,11 @@ def OnInit(fire):
         RefreshFirePads(fire, False) #forece refresh 
 
 def OnRefreshPlayback(fire, playingNote):
+    global _playingNote 
+
+    if(playingNote >= 0):
+        _playingNote = playingNote 
+    
     Update_Fire(fire)
 
     if(not isAllowed()):
@@ -589,16 +594,24 @@ def OnRefreshPlayback(fire, playingNote):
         return False
 
     if( (playingNote >= 0) or (len(fire.PlayingNotes) > 0) ):
-        #print('OnPlayback', playingNote, fire.PlayingNotes)
-        #print('OnPlayback Notes:', playingNote, fire.PlayingNotes)
-
-        #for pad in _PadMaps:
-        #    if (pad.MIDINote == playingNote):
-        #        print('OnPlayback Pad:', pad.PadIndex)
-                #nfxSetFIRELEDCol(fire, pad.PadIndex, cYellow, 0)
+       
+        if(False):
+            #print('OnPlayback Notes:', playingNote, fire.PlayingNotes)
+            for padIdx in defs.Perf_Pads:
+                pad = _PadMaps[padIdx]
+                if (pad.MIDINote == playingNote):
+                    nfxSetFIRELEDCol(fire, padIdx, cRed, 0)
+                else:
+                    nfxSetFIRELEDCol(fire, padIdx, pad.Color, 2)
+                    
+        RefreshPerfPads(fire) 
         return True #if True, will not run default coe in device_Fire
     else:
-        return False 
+        _playingNote = -1
+        RefreshPerfPads(fire) 
+        return True 
+
+    
 
 # called from TFire.OnIdle
 def OnFPCPadPress(fire, event, m):
@@ -862,17 +875,43 @@ def RefreshPerfPads(fire):
     if not isAllowed():
         return
 
+    GC_BackgroundColor = 0
+    GC_Semitone = 1
+
+    pat = getSelPat()
+
     if(_showFPCColors):  # Show Custom FPC Colors
+        chanIdx = pat.Channel.FLIndex
+
         # FPC A Pads
-        for p in defs.FPC_APads:
-            nfxSetFIRELEDCol(fire, p, defs.FPC_APadColors[defs.FPC_APads.index(p)], 2)
-        for p in defs.FPC_BPads:
-            nfxSetFIRELEDCol(fire, p, defs.FPC_BPadColors[defs.FPC_BPads.index(p)], 2)
+        fpcpadIdx = 0
+        dim = 1
+        for p in defs.FPC_APads_FL:
+            col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx)
+            pMap = _PadMaps[p]
+            if (pMap.MIDINote == _playingNote):
+                dim = 0
+
+            nfxSetFIRELEDCol(fire, p, getColorFromFL(col), dim)
+            fpcpadIdx += 1
+
+        # FPC B Pads
+        fpcpadIdx = 0
+        for p in defs.FPC_BPads_FL:
+            col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx+16)
+            pMap = _PadMaps[p]
+            if (pMap.MIDINote == _playingNote):
+                dim = 0
+
+            nfxSetFIRELEDCol(fire, p, getColorFromFL(col), 2)
+            fpcpadIdx += 1
+            
+
     else:
         for p in defs.Perf_Pads:
             dim = 3
             if(_PadMaps[p].IsRootNote):
-                col = cBlueLight
+                col = pat.Color 
             elif(_PadMaps[p].IsKeyNote) and (_PadMaps[p].ChordNum < 1):
                 col = cWhite 
                 dim = dim - 1
@@ -1376,7 +1415,25 @@ def HandleMacros(fire, event, PadIndex):
                 SetMutePreset(2) 
 
         if MacroIndex == 7:
-            SetAllMutes(-1) # toggle
+            if(fire.AltHeld):
+                ShowPluginInfo()
+            else:
+                SetAllMutes(-1) # toggle
+
+def ShowPluginInfo():
+    chanIdx = getSelPat().Channel.FLIndex
+    print('   PluginName: ', plugins.getPluginName(chanIdx, -1, 0))
+    pCnt = plugins.getParamCount(chanIdx, -1)
+    print('   ParamCount: ', pCnt)
+    for param in range(0, pCnt):
+        print('     Param', param, plugins.getParamName(param, chanIdx, -1) )
+        print('     Value', param, plugins.getParamValue(param, chanIdx, -1) )
+        print('    ValStr', param, plugins.getParamValueString(param, chanIdx, -1) )
+        print('    Color0', param, plugins.getColor(chanIdx, -1, 0, param) )
+        print('    Color1', param, plugins.getColor(chanIdx, -1, 1, param) )
+        #print('      Name', param, plugins.getName(chanIdx, -1, FPN_Param, param) )
+        print('----------------------')
+
 
 def SetMutePreset(presetNum):
     for pat in _Patterns:
@@ -1441,9 +1498,7 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
     nfxPat = _Patterns[patNum-1]  # 0 based
     mixerNum = nfxPat.Mixer.FLIndex
     chanidx = nfxPat.Channel.FLIndex
-
-    
-
+    pluginName = plugins.getPluginName(chanidx, -1, 0)
 
     selPat = getSelPat()
     mixerNumPrev = selPat.Mixer.FLIndex
@@ -1506,7 +1561,7 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
         channels.muteChannel(chanidx)
 
 
-    isFPC = nfxPat.Name.startswith('FPC') or nfxPat.Name.startswith('...FPC')
+    isFPC = (pluginName == 'FPC') # nfxPat.Name.startswith('FPC') or nfxPat.Name.startswith('...FPC')
 
     if (isFPC):  # show FPC colors
         #print('fpc', mixerNum, _drumMixerTrk)
