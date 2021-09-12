@@ -109,6 +109,7 @@ _ChordNum = -1
 _Chord7th = False
 _rptEvent = device_Fire.TMidiEvent()
 _ScaleInfo = ""
+_lastNote = -1
 
 # lists of things
 _Macros = list()
@@ -143,7 +144,9 @@ _velIdx = _initialVelocityIndex
 _velocity = VelocityList[_velIdx]   
 _velocityoff = -1
 
-NotesList = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+NotesListSharp = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+NotesList = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B']
+
 #list of prefered keys. can be all or subset if you want: [0,4,6,9,11] # C, E, F#, A, B 
 _faveNoteList = [0,1,2,3,4,5,6,7,8,9,10,11]
 _faveNoteIdx = 0 # off set from above
@@ -162,7 +165,7 @@ _faveModesList = [                           # descriptions/key notes from jake 
         [HARMONICSCALE_MINORPENTATONIC, 7]    # Minor
                    ]
 _faveModeIdx = 0 
-OctavesList = [1,2,3,4]
+OctavesList = [1,2,3,4,5]
 _octaveIdx = 2 #index of above.
 
 
@@ -582,14 +585,12 @@ def OnInit(fire):
 
 def OnRefreshPlayback(fire, playingNote):
     global _playingNote 
+    global _lastNote 
 
     Update_Fire(fire)
 
     if(not isAllowed()):
         return False    
-
-   ## if(_showFPCColors):
-   #     return False
 
     if(playingNote >= 0) and (_playingNote != playingNote):
         _playingNote = playingNote 
@@ -597,26 +598,19 @@ def OnRefreshPlayback(fire, playingNote):
         _playingNote = -1
 
     if( (playingNote >= 0) or (len(fire.PlayingNotes) > 0) ):
+        
         if(transport.isPlaying()):
-            #print('**', _showFPCColors, playingNote) 
-            for padIdx in defs.Perf_Pads:
-                pad = _PadMaps[padIdx]
-                #print('OnPlayback Notes:', playingNote, fire.PlayingNotes, 'perf', pad.PadIndex, pad.MIDINote)
-                if(_showFPCColors):
-                    if (pad.FPCNote == playingNote):
-                        nfxSetFIRELEDCol(fire, padIdx, pad.FPCColor, 0)
-                    else:
-                        nfxSetFIRELEDCol(fire, padIdx, pad.FPCColor, 2)
-                else: #not fpc
-                    if (pad.MIDINote == playingNote) and (pad.ChordNum < 1):
-                        nfxSetFIRELEDCol(fire, padIdx, pad.Color, 0)
-                    else:
-                        nfxSetFIRELEDCol(fire, padIdx, pad.Color, 2)
-
-        #RefreshPerformancePads(fire) 
-        return True #if True, will not run default coe in device_Fire
+            ShowNote(playingNote)
+            _lastNote = playingNote
+        else: #stopped
+            ShowNote(-1)
+            _lastNote = -1
     else:
-        return True 
+        if(_lastNote != -1):
+            _lastNote = -1
+            ShowNote(-1)
+        
+    return True 
 
     
 
@@ -817,26 +811,22 @@ def RefreshPatternPads(fire):
 
         vis = playlist.getTrackActivityLevelVis(nfxPat.FLIndex)
         if(vis > 0 ):
-            dim = 1 
+            dim = 3 
         if(vis > 33):
-            dim = 3
-        if (vis > 66): 
             dim = 2
+        if (vis > 66): 
+            dim = 1
         if(vis > 80):
-            dim = 1 
+            dim = 0 
 
         if (nfxPat.FLIndex == _selectedPattern):
             dim = dim - 1 
 
-        #if(_selectedPattern == trk):
-        #    nfxSetFIRELEDCol(fire, pad, color, _subpattern)
-        #else:
         nfxSetFIRELEDCol(fire, pad, color, dim)
 
-        # if (not fire.CurrentKnobsMode in [] != device_Fire.KnobsModeMixer:
-        if(nfxPat.Muted == 1):
-            if _nfxBlinkTimer < _nfxBlinkSpeed:
-                nfxSetFIRELEDCol(fire, pad, color, 4)
+#        if(nfxPat.Muted == 1):
+#            if _nfxBlinkTimer < _nfxBlinkSpeed:
+#                nfxSetFIRELEDCol(fire, pad, color, 4)
 
 
 def RefreshFirePads(fire, clearfirst):
@@ -896,7 +886,7 @@ def RefreshPerformancePads(fire):
         chanIdx = pat.Channel.FLIndex
         # FPC A Pads
         fpcpadIdx = 0
-        dim = 2
+        dim = defs._globalDimDef
         for p in defs.FPC_APads_FL:
             col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx)
             _PadMaps[p].FPCColor = getColorFromFL(col)
@@ -906,11 +896,11 @@ def RefreshPerformancePads(fire):
         for p in defs.FPC_BPads_FL:
             col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx)
             _PadMaps[p].FPCColor = getColorFromFL(col)
-            nfxSetFIRELEDCol(fire, p, getColorFromFL(col), 2)
+            nfxSetFIRELEDCol(fire, p, getColorFromFL(col), dim)
             fpcpadIdx += 1
     else:
         for p in defs.Perf_Pads:
-            dim = 2
+            dim = defs._globalDimDef
             if(_PadMaps[p].IsRootNote):
                 col = pat.Color 
             elif(_PadMaps[p].IsKeyNote) and (_PadMaps[p].ChordNum < 1):
@@ -919,14 +909,16 @@ def RefreshPerformancePads(fire):
             else:
                 col = cWhite
 
-            if(_PadMaps[p].ChordNum >= 1):
-                col = cBlue
-            
-            if(_PadMaps[p].ChordNum == 8):
-                col = cPurple 
-                if(_Chord7th):
-                    col = cPurpleLight
-                    dim = dim - 1
+            if(GetScaleNoteCount(_scale) == 7): #chord bar for  scales with 7 notes only
+
+                if(_PadMaps[p].ChordNum >= 1):
+                    col = cBlue
+
+                if(_PadMaps[p].ChordNum == 8):
+                    col = cPurple 
+                    if(_Chord7th):
+                        col = cPurpleLight
+                        dim = dim - 1
                 
             _PadMaps[p].Color = col         
 
@@ -1043,9 +1035,7 @@ def GetScaleGrid(newFaveModeIdx=0, rootNote=0, startOctave=2):
             rowOffset = 16 * revRow  # 0,16,32,48
             padIdx = rowOffset + colOffset
 
-            
-
-            if(row == 3): #chord row
+            if(row == 3) and (GetScaleNoteCount(_scale) == 7): #chord row
                 _PadMaps[padIdx].MIDINote = noteVal
                 _PadMaps[padIdx].ChordNum = colOffset + 1
             else:
@@ -1054,7 +1044,6 @@ def GetScaleGrid(newFaveModeIdx=0, rootNote=0, startOctave=2):
 
             _PadMaps[padIdx].IsRootNote = (colOffset == 0) or (colOffset == notesInScale)
             _PadMaps[padIdx].IsKeyNote = (colOffset == (_keynote-1) ) # 0-based index
-            #print('...pMap.MIDINote', _PadMaps[padIdx].MIDINote, _PadMaps[padIdx].IsRootNote)
 
     _ScaleInfo = NotesList[_faveNoteIdx] + str(startOctave) + " " + HarmonicScaleNamesT[_scale]
     print('Scale:',_ScaleInfo)
@@ -1071,13 +1060,13 @@ def RefreshMacroPads(fire):
         macIdx = defs.MacroPads.index(macPad)
         macCol = defs.MacroColors[macIdx]
 
-        dim = 2 
+        dim = defs._globalDimDef 
 
         if (macIdx == 0): # velocity
             macCol = VelocityColors[_velIdx]
 
         if (macIdx == 1): #octave
-            dim = 4 - OctavesList[_octaveIdx]
+            dim = 5 - OctavesList[_octaveIdx]
 
         nfxSetFIRELEDCol(fire, macPad, macCol, dim)
 
@@ -1099,11 +1088,34 @@ def HandleControlPress(fire, event):
     Update_Fire(fire)
     RefreshFirePads(fire, False)
 
+def ShowNote(note):
+    global _lastNote 
+
+    for pIdx in defs.Perf_Pads:
+        pad = _PadMaps[pIdx]
+        if(_showFPCColors):
+            if(pad.FPCNote == note):
+                nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.FPCColor, defs._globalDimMax)    
+            if(pad.FPCNote == _lastNote):
+                nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.FPCColor, defs._globalDimDef)    
+        else:
+            if(pad.MIDINote == note):
+                nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.Color, defs._globalDimMax)
+            if(pad.MIDINote == _lastNote):
+                nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.Color, defs._globalDimDef)
+
 def HandleChord(chan, chordNum, noteOn, play7th, playInverted):
     #
     global _ChordNum
     global _ChordInvert
     global _Chord7th
+
+    if (GetScaleNoteCount(_scale) != 7):
+        return 
+
+    chordTypes = ['','m','m','','','m','dim']
+    
+    chordName = ''
 
     note =  -1#the target root note
     note3 = -1
@@ -1113,31 +1125,44 @@ def HandleChord(chan, chordNum, noteOn, play7th, playInverted):
     offset = 0
     if(0 < chordNum < 8): #if a chord, then use the _ScaleNotes to find the notes
         offset = GetScaleNoteCount(_scale) + (chordNum-1)
-        #print('chord!')
         note = _ScaleNotes[offset]
         note3 = _ScaleNotes[offset + 2]
         note5 = _ScaleNotes[offset + 4]
         note7 = _ScaleNotes[offset + 6]
-        note5inv = _ScaleNotes[offset - 3]   
+        note5inv = _ScaleNotes[offset - 3] 
+
+        chordName = NotesList[note % 12]
+        
+        chordName += chordTypes[ ((_faveModeIdx + chordNum) % 7)-1 ]
+        #print('chord', chordNum, _faveModeIdx)
 
     if(noteOn):
         #
         channels.midiNoteOn(chan, note, _velocity)
         channels.midiNoteOn(chan, note3, _velocity)
 
+        ShowNote(note)
+        ShowNote(note3)
+
         _ChordNum = chordNum
         _ChordInvert = playInverted
         _Chord7th = play7th
 
+        if(play7th):
+            chordName += '7'
+            channels.midiNoteOn(chan, note7, _velocity)        
+            ShowNote(note7)
+
         if(playInverted):
+            chordName += ' inv'
             channels.midiNoteOn(chan, note5inv, _velocity)
+            ShowNote(note5inv)
         else:
             channels.midiNoteOn(chan, note5, _velocity)
+            ShowNote(note5)
 
-        if(play7th):
-            channels.midiNoteOn(chan, note7, _velocity)        
+        _Fire.DisplayTimedText(chordName)
 
-        
     else:
         # turn off the chord
         channels.midiNoteOn(chan, note, _velocityoff)
@@ -1395,7 +1420,7 @@ def HandleMacros(fire, event, PadIndex):
 
         if MacroIndex == 2:
             if(fire.AltHeld):
-                ToggleRepeat() #print('repeat is disabled')
+                print('repeat is disabled') #ToggleRepeat() #
             else:
                 NextSnap()
         
@@ -1613,19 +1638,16 @@ def ResetPadMaps():
     # map the pads
     patidx = -1
     _PadMaps.clear()
-    #print('Pattern Pads...' , PatternPads)
     for padNum in range(0, 64):  # the pads
         pMap = TnfxPadMap()
-        pMap.FirePadIndex = padNum
+        pMap.PadIndex = padNum
         pMap.MIDINote = -1
 
-        offs = 0
         if(padNum in defs.FPC_APads):
             pMap.Name = 'FPC-A'
             noteIdx = defs.FPC_APads.index(padNum)
             pMap.FPCNote = defs._FPC_Notes[noteIdx] 
 
-        offs = 0
         if(padNum in defs.FPC_BPads):
             pMap.Name = 'FPC-B'
             noteIdx = defs.FPC_BPads.index(padNum)
@@ -1636,14 +1658,12 @@ def ResetPadMaps():
             patidx = defs.PatternPads.index(padNum)  # ex.  Pad[0] = _Patterns[1]
             patNum = defs.PatternChannels[patidx]
             nfxPat = _Patterns[patNum-1]  # 0 based
-            # print('...added pad:', patNum, nfxPat.Name, nfxPat.FLIndex, '-->Channel:', nfxPat.Channel.Name, nfxPat.Channel.FLIndex,
-            #              '-->Mixer:', nfxPat.Mixer.Name, nfxPat.Mixer.FLIndex) 
+
             pMap.Name = nfxPat.Name
             pMap.Mixer = nfxPat.Mixer
             pMap.Channel = nfxPat.Channel
             pMap.Color = nfxPat.Color
             pMap.PatternIndex = nfxPat.FLIndex
-            
 
         if padNum in defs.MacroPads:                 # is the pad in the list of Macro Pads?
             macIdx = defs.MacroPads.index(padNum)    # get the Macro Index
@@ -1651,10 +1671,6 @@ def ResetPadMaps():
             pMap.Color = defs.MacroColors[macIdx]
 
         _PadMaps.append(pMap)
-
-        #if(len(pMap.Name) > 1) and (False):  # todo logic for showing
-            #print('......Pad Mapped: ', pMap.Name, pMap.FirePadIndex, pMap.MIDINote)
-
 
 def Update_Fire(fire):
     global _Fire

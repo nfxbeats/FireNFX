@@ -1,6 +1,9 @@
 from midi import *
 from nfxFireColors import * 
 
+_globalDimDef = 2
+_globalDimMax = 0
+
 #AKAI Pads  0..63 starts from top left  to right bottom
 
 #pads to display the playlist patterns - top row, last 8
