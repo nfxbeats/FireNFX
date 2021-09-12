@@ -70,12 +70,13 @@ class TnfxPadMap:
         # if it belongs second row  to a channel pad group this will be > -1
         self.ChannelIndex = -1
         self.PatternIndex = -1      # if > -1 it will be top row
-        self.Color = 0x000000       # the color that looks right on Fire
-        #self.FLColor = 0x000000     # the color that looks like above color best in FL
+        self.Color = 0x000000       # the color 
+        self.FPCColor = 0x000000    # color of the FPC Pad
         self.MIDINote = -1          # the midi Note for this pad
         self.ChordNum = -1             # the chord . ie 1 = I, 2 = ii, etc
         self.IsRootNote = False     #
         self.IsKeyNote = False      #
+        self.FPCNote = -1
 
 class TnfxMacro:
     def __init__(self):
@@ -582,33 +583,39 @@ def OnInit(fire):
 def OnRefreshPlayback(fire, playingNote):
     global _playingNote 
 
-    if(playingNote >= 0):
-        _playingNote = playingNote 
-    
     Update_Fire(fire)
 
     if(not isAllowed()):
-        return False
+        return False    
 
-    if(_showFPCColors):
-        return False
+   ## if(_showFPCColors):
+   #     return False
 
-    if( (playingNote >= 0) or (len(fire.PlayingNotes) > 0) ):
-       
-        if(False):
-            #print('OnPlayback Notes:', playingNote, fire.PlayingNotes)
-            for padIdx in defs.Perf_Pads:
-                pad = _PadMaps[padIdx]
-                if (pad.MIDINote == playingNote):
-                    nfxSetFIRELEDCol(fire, padIdx, cRed, 0)
-                else:
-                    nfxSetFIRELEDCol(fire, padIdx, pad.Color, 2)
-                    
-        RefreshPerfPads(fire) 
-        return True #if True, will not run default coe in device_Fire
+    if(playingNote >= 0) and (_playingNote != playingNote):
+        _playingNote = playingNote 
     else:
         _playingNote = -1
-        RefreshPerfPads(fire) 
+
+    if( (playingNote >= 0) or (len(fire.PlayingNotes) > 0) ):
+        if(transport.isPlaying()):
+            #print('**', _showFPCColors, playingNote) 
+            for padIdx in defs.Perf_Pads:
+                pad = _PadMaps[padIdx]
+                #print('OnPlayback Notes:', playingNote, fire.PlayingNotes, 'perf', pad.PadIndex, pad.MIDINote)
+                if(_showFPCColors):
+                    if (pad.FPCNote == playingNote):
+                        nfxSetFIRELEDCol(fire, padIdx, pad.FPCColor, 0)
+                    else:
+                        nfxSetFIRELEDCol(fire, padIdx, pad.FPCColor, 2)
+                else: #not fpc
+                    if (pad.MIDINote == playingNote) and (pad.ChordNum < 1):
+                        nfxSetFIRELEDCol(fire, padIdx, pad.Color, 0)
+                    else:
+                        nfxSetFIRELEDCol(fire, padIdx, pad.Color, 2)
+
+        #RefreshPerformancePads(fire) 
+        return True #if True, will not run default coe in device_Fire
+    else:
         return True 
 
     
@@ -620,7 +627,7 @@ def OnFPCPadPress(fire, event, m):
     # this is so I can consistently only call OnXXXXXX functions from device_Fire
     #as well as do the isAllowed check.
     if(isAllowed()):
-        return HandleFPCPress(fire, event, m) 
+        return HandlePerformancePads(fire, event, m) 
     else:
         return False 
 
@@ -711,7 +718,8 @@ def OnMidiMsg(fire, event):
     global _IsRepeating
     global _RepeatNote
     global _IsActive 
-    origevent = event
+    global _playingNote
+    
     wasHandled = False
     Update_Fire(fire)    
 
@@ -742,7 +750,8 @@ def OnMidiMsg(fire, event):
                         fire.UpdateCurrentPadsMode
                     
 
-#            if (event.midiId == MIDI_NOTEOFF):
+            if (event.midiId == MIDI_NOTEOFF):
+                _playingNote = -1
                 #print('MidiMsg.PadOff=', PadIndex)
 
             event.handled = wasHandled
@@ -858,7 +867,7 @@ def RefreshFirePads(fire, clearfirst):
     # turn on the needed macro buttons - third row
     RefreshMacroPads(fire)
 
-    RefreshPerfPads(fire)
+    RefreshPerformancePads(fire)
 
     if(False):  # if true, will hide FPC
         # FPC A Pads
@@ -869,47 +878,39 @@ def RefreshFirePads(fire, clearfirst):
             nfxSetFIRELEDCol(fire, p, cOff, 3)
 
 
-def RefreshPerfPads(fire):
+def RefreshPerformancePads(fire):
     global _PadMaps
     Update_Fire(fire)
     if not isAllowed():
         return
 
+    
     GC_BackgroundColor = 0
     GC_Semitone = 1
 
     pat = getSelPat()
 
+    #print('FPC', _showFPCColors)
+
     if(_showFPCColors):  # Show Custom FPC Colors
         chanIdx = pat.Channel.FLIndex
-
         # FPC A Pads
         fpcpadIdx = 0
-        dim = 1
+        dim = 2
         for p in defs.FPC_APads_FL:
             col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx)
-            pMap = _PadMaps[p]
-            if (pMap.MIDINote == _playingNote):
-                dim = 0
-
+            _PadMaps[p].FPCColor = getColorFromFL(col)
             nfxSetFIRELEDCol(fire, p, getColorFromFL(col), dim)
             fpcpadIdx += 1
-
         # FPC B Pads
-        fpcpadIdx = 0
         for p in defs.FPC_BPads_FL:
-            col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx+16)
-            pMap = _PadMaps[p]
-            if (pMap.MIDINote == _playingNote):
-                dim = 0
-
+            col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx)
+            _PadMaps[p].FPCColor = getColorFromFL(col)
             nfxSetFIRELEDCol(fire, p, getColorFromFL(col), 2)
             fpcpadIdx += 1
-            
-
     else:
         for p in defs.Perf_Pads:
-            dim = 3
+            dim = 2
             if(_PadMaps[p].IsRootNote):
                 col = pat.Color 
             elif(_PadMaps[p].IsKeyNote) and (_PadMaps[p].ChordNum < 1):
@@ -1004,6 +1005,8 @@ def RefreshChannelPads(fire):
                 nfxSetFIRELEDCol(fire, padNum, cOff, 0)
             else:
                 nfxSetFIRELEDCol(fire, padNum, cDimWhite, 0)
+
+
 
 def GetScaleGrid(newFaveModeIdx=0, rootNote=0, startOctave=2):
     global _PadMaps
@@ -1151,7 +1154,7 @@ def HandleChord(chan, chordNum, noteOn, play7th, playInverted):
 
 
 
-def HandleFPCPress(fire, event, m):
+def HandlePerformancePads(fire, event, m):
     global _RepeatNote
     global _IsRepeating
     global _ChordInvert
@@ -1192,8 +1195,16 @@ def HandleFPCPress(fire, event, m):
     if(_showFPCColors):
         note = m
         fpcNoteIdx = defs._FPC_Notes.index(note)
-        padNoteVal = defs._PAD_Notes[fpcNoteIdx] + \
-            device_Fire.PadFirst - 4  # -4 is the FPC offset
+        
+        if(0 < fpcNoteIdx < 16):
+            padIndex = defs.FPC_APads[fpcNoteIdx]
+        
+        if(15 < fpcNoteIdx < 32):
+            padIndex = defs.FPC_BPads[15-fpcNoteIdx]
+
+        padNoteVal = _PadMaps[padIdx].MIDINote
+
+        #padNoteVal = defs._PAD_Notes[fpcNoteIdx] + device_Fire.PadFirst - 4  # -4 is the FPC offset
     else:
         padNoteVal = note
 
@@ -1221,7 +1232,7 @@ def HandleFPCPress(fire, event, m):
             if(_RepeatNote) and (not _IsRepeating):
                 _IsRepeating = True
                 event.data1 = padNoteVal
-                rptTime = GetBeatLenInMS(2)
+                rptTime = GetBeatLenInMS(4)
                 print('-----------> Note', note, 'NewNote', padNoteVal, rptTime)
                 channels.midiNoteOn(chan, note, _velocity) #single note
                 device.repeatMidiEvent(event, int(rptTime), int(rptTime) )
@@ -1229,10 +1240,7 @@ def HandleFPCPress(fire, event, m):
                 event.handled = True
             else: 
                 channels.midiNoteOn(chan, note, _velocity) #single note
-    
                 
-        # print('.......FPC', event.data1, 'PadIdx', padIdx,'m', m,  'Note', note,
-        #   'MIDINote', _PadMaps[padIdx].MIDINote, 'RPT:', _RepeatNote, rptTime)
 
     else:
 
@@ -1250,6 +1258,7 @@ def HandleFPCPress(fire, event, m):
             device.stopRepeatMidiEvent()
 
     # print("---------------------------")
+    
     return True  # wasHandled
 
 # needs to be called from OnMidiMsg NOTE ON /OFF section of device_Fire
@@ -1540,15 +1549,17 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
 
     if(nfxPat.Muted == 1) and (transport.isRecording()): #do not allow muted channels when recordining 
         MutePlaylistTrack(nfxPat.FLIndex, 0)
-
+    
     patterns.jumpToPattern(nfxPat.FLIndex)
+
     _selectedPattern = nfxPat.FLIndex
+    chanidx = nfxPat.Channel.FLIndex
+    pluginName = plugins.getPluginName(chanidx, -1, 0)    
     
     if(setMixer):
         mixer.setTrackNumber(mixerNum)
 
     ui.showWindow(widChannelRack)
-
     if(not channels.isChannelSelected(chanidx)):
         channels.selectOneChannel(chanidx)
 
@@ -1561,17 +1572,9 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
         channels.muteChannel(chanidx)
 
 
-    isFPC = (pluginName == 'FPC') # nfxPat.Name.startswith('FPC') or nfxPat.Name.startswith('...FPC')
+    _showFPCColors = (pluginName == 'FPC') # nfxPat.Name.startswith('FPC') or nfxPat.Name.startswith('...FPC')
 
-    if (isFPC):  # show FPC colors
-        #print('fpc', mixerNum, _drumMixerTrk)
-        _showFPCColors = True
-    else:
-        #print('not fpc', mixerNum, _drumMixerTrk)
-        _showFPCColors = False
-
-    RefreshPerfPads(_Fire)
-
+    RefreshPerformancePads(_Fire)
         
     if(showPlugin): #when false show NO windows
         ui.showWindow(widPlugin)  # wid was missing from midi.py
@@ -1585,6 +1588,10 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
     #ui.openEventEditor(channels.getRecEventId(chanNum) + REC_Chan_Pitch, EE_EE)
     #print('OUT->Pattern:', nfxPat.FLIndex, '_Sel:',
           #_selectedPattern, 'Mixer:', mixerNum, )
+
+
+
+
 # endregion
 
 # region nfxFuncs
@@ -1612,13 +1619,17 @@ def ResetPadMaps():
         pMap.FirePadIndex = padNum
         pMap.MIDINote = -1
 
+        offs = 0
         if(padNum in defs.FPC_APads):
             pMap.Name = 'FPC-A'
-            pMap.MIDINote = -1
+            noteIdx = defs.FPC_APads.index(padNum)
+            pMap.FPCNote = defs._FPC_Notes[noteIdx] 
 
+        offs = 0
         if(padNum in defs.FPC_BPads):
             pMap.Name = 'FPC-B'
-            pMap.MIDINote = -1
+            noteIdx = defs.FPC_BPads.index(padNum)
+            pMap.FPCNote = defs._FPC_Notes[noteIdx+16]
 
         # iterates the FIRE pads defined for patterns - top row
         if padNum in defs.PatternPads:

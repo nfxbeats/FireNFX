@@ -52,21 +52,11 @@ FPC_BPads = [4, 5, 6, 7,
 #these define the FL Studio index running from bottom left to top right for the A Pads and B Pads separately
 FPC_APads_FL = [48, 49, 50, 51, 32, 33, 34, 35, 16, 17, 18, 19, 0, 1, 2, 3]
 FPC_BPads_FL = [52, 53, 54, 55, 36, 37, 38, 39, 20, 21, 22, 23, 4, 5, 6, 7]
-
+ 
 Perf_Pads = [0,1,2,3, 4, 5, 6, 7,
              16, 17, 18, 19, 20, 21, 22, 23,
              32, 33, 34, 35, 36, 37, 38, 39, 
              48, 49, 50 , 51, 52, 53, 54, 55]
-
-# color scheme for my default kit
-FPC_APadColors = [cPurple, cPurple, cYellow, cYellow,
-                  cRed, cRed, cYellow, cYellow,
-                  cRed, cRed, cRed, cRed,
-                  cBlue, cBlue, cBlue, cBlue]
-FPC_BPadColors = [cGreen, cGreen, cGreen, cGreen,
-                  cCyan, cCyan, cCyan, cCyan,
-                  cSilver, cSilver, cSilver, cSilver,
-                  cOrange, cOrange, cOrange, cOrange]  
 
 # arrays are used to unencode the translation, so when we do a "repeat note" it sends the untranslated value
 # if I didnt do this, the note would get re-translated into the wrong note. 
@@ -75,7 +65,18 @@ _PAD_Notes = [52, 53, 54, 55, 56, 57, 58, 59,
               36, 37, 38, 39, 40, 41, 42, 43, 
               20, 21, 22, 23, 24, 25, 26, 27,
                4,  5,  6,  7,  8,  9, 10, 11, -1]
-_FPC_Notes = [37, 36, 42, 54, 60, 61, 62, 63, 
+
+_FPC_Notes = [49, 55, 51, 53, 
+              48, 47, 45, 43, 
+              40, 38, 46, 44,
+              37, 36, 42, 54, 
+
+              72, 73, 74, 75,
+              68, 69, 70, 71, 
+              64, 65, 66, 67,
+              60, 61, 62, 63, -1]
+
+_FPC_Notes2 = [37, 36, 42, 54, 60, 61, 62, 63, 
               40, 38, 46, 44, 64, 65, 66, 67, 
               48, 47, 45, 43, 68, 69, 70, 71, 
               49, 55, 51, 53, 72, 73, 74, 75, -1]
