@@ -971,6 +971,8 @@ class TFire():
 
     def OnMidiIn(self, event):
 
+        #nfxFire.OnMidiIn(self, event)
+
         if ((event.status == MIDI_NOTEON) | (event.status == MIDI_NOTEOFF)) & utils.InterNoSwap(event.data1, IDKnob1, IDKnob4) & self.ShiftHeld:
             print('Ignored note on/off')
             return
@@ -980,7 +982,6 @@ class TFire():
             if (event.status & 0xF0) in [MIDI_NOTEON, MIDI_NOTEOFF]:
                 if not self.TranslateNote(event):
                     event.handled = False #todo
-                    nfxFire.OnMidiIn(self, event)
                     return
             if event.status == 0xF4:
 
@@ -1062,6 +1063,7 @@ class TFire():
 
     def OnMidiMsg(self, event):
 
+        #print('IL Vals', event.data1, event.data2, event.midiId)
         nfxFire.OnMidiMsg(self, event) #NFX
 
         tempHeldPads = bytearray()
@@ -1218,7 +1220,7 @@ class TFire():
                     event.handled = True
                 return
 
-        if (not event.handled):
+        if (not event.handled): #handle the knobs with ALT
             if (event.data1 == IDKnob1) & (event.data2 != 0) & self.AltHeld:
                 i = event.data2
                 if (i >= 64) & (i <= 127):
@@ -1269,7 +1271,6 @@ class TFire():
                         self.SetAnalyzerMode(self.CurrentMode)
                     self.TopTextTimer = TextDisplayTime
                 event.handled = True
-
             if (event.data1 == IDKnob4) & (event.data2 != 0) & self.AltHeld:
                 i = event.data2
                 if (i >= 64) & (i <= 127):
@@ -1300,7 +1301,7 @@ class TFire():
 
                 event.handled = True
 
-        if not event.handled:
+        if not event.handled: #jog wheel navigation if menu showing
             if screen.menuShowing():
                 if (event.midiId == MIDI_CONTROLCHANGE) & (event.data1 == IDJogWheel):
                     if (event.data2 >= 1) & (event.data2 <= 63):
@@ -1837,6 +1838,8 @@ class TFire():
                     self.SendCC(IDPatternUp, int(event.midiId == MIDI_NOTEON) * SingleColorFull)
 
                 elif event.data1 == IDPatternDown:
+
+                    #print('fire,,,', event.data1)
 
                     self.PatDownBtnHeld = (event.midiId == MIDI_NOTEON)
                     if (event.midiId == MIDI_NOTEON) & (patterns.patternNumber() < patterns.patternMax()) & ((self.CurrentMode == ModeStepSeq) | (self.CurrentMode == ModeNotes) | (self.CurrentMode == ModeDrum)):
@@ -2954,7 +2957,6 @@ class TFire():
         if not self.AccentMode & (Value > 0):
             Value = 100
         elif self.AccentMode & (Value > 0):
-
             if Value < 64:
                 Value = 100
             else:

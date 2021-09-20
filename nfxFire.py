@@ -5,10 +5,11 @@
 #
 
 # region imports
+
 import nfxFirePadDefs as defs 
 from nfxFireColors import *
 import utils
-from device_Fire import Fire, TMidiEvent
+from device_Fire import Fire, PadFirst, TMidiEvent
 import device_Fire
 import plugins
 import patterns
@@ -29,6 +30,12 @@ widPlugin = 5  # missing from midi.py
 
 # region Classes
 
+class TnfxParameter:
+    def __init__(self, caption, offset, value, bipolar):
+        self.Offset = offset 
+        self.Caption = caption
+        self.Value = value
+        self.Bipolar = bipolar 
 
 class TnfxMixer:
     def __init__(self):
@@ -60,6 +67,13 @@ class TnfxPattern:
         self.Color = cOff
         self.MutePreset1 = 0
         self.MutePreset2 = 1
+        self.FilterParam = -1
+        self.ResParam = -1
+        self.PluginName = ''
+        self.Parameters = list() 
+        self.ParamPages = []
+        self.ParamPageIdx = -1
+    
 
 class TnfxPadMap:
     def __init__(self):
@@ -77,6 +91,8 @@ class TnfxPadMap:
         self.IsRootNote = False     #
         self.IsKeyNote = False      #
         self.FPCNote = -1
+        self.Pressed = -1 
+
 
 class TnfxMacro:
     def __init__(self):
@@ -111,6 +127,9 @@ _rptEvent = device_Fire.TMidiEvent()
 _ScaleInfo = ""
 _lastNote = -1
 
+_OpMode = device_Fire.ModeDrum  #device_Fire.ModePerf
+
+
 # lists of things
 _Macros = list()
 _PadMaps = list()
@@ -120,6 +139,16 @@ _Mixers = list()
 #_MutedTracks = list()
 _ScaleNotes = list()
 _playingNote = -1
+
+_ParamPages = ['Filt / Reso']
+
+_FLEX_ParamPages =  ["Filter", "Delay", 'Reverb 1', 'Reverb 2']
+_FLEX_ParamNames =  ["Master filter cutoff",  "Master filter resonance",   # page 1
+                     "Delay mix",             "Delay time",                # page 2
+                     "Reverb mix",            "Reverb size",               # page 3
+                     "Reverb decay",          "Reverb color" ]             # page 4
+
+_ParamPageIdx = 0 # 0-based
 
 # snap defs are in MIDI.py aka Snap_Cell, Snap_line, etc
 _snapModes = ["Default", "Line", "?", "Cell", "None",
@@ -136,16 +165,16 @@ _repeatSnap = SnapModesList[_repeatSnapIdx]
 _snapIdx = _initialSnapIndex
 
 #define the list of velocities
-VelocityList = [0, 112, 120, 127]
-VelocityColors = [cWhite, cGreen, cYellow, cOrange, cRed]
-_initialVelocityIndex = 1 #initial value - index of above - 0-based
-_initialVelocity = VelocityList[_initialVelocityIndex]
+VelocityList = [0, 95, 112, 120, 127]
+VelocityColors = [cWhite, cBlueLight, cGreen, cYellow, cOrange, cRed]
+_initialVelocityIndex = 2 #initial value - index of above - 0-based
 _velIdx = _initialVelocityIndex
 _velocity = VelocityList[_velIdx]   
 _velocityoff = -1
 
-NotesListSharp = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
-NotesList = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B']
+NotesListFlats = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B']
+NotesListSharps = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+NotesList = NotesListFlats
 
 #list of prefered keys. can be all or subset if you want: [0,4,6,9,11] # C, E, F#, A, B 
 _faveNoteList = [0,1,2,3,4,5,6,7,8,9,10,11]
@@ -172,6 +201,57 @@ _octaveIdx = 2 #index of above.
 # endregion
 
 # region nfx/FL/FIRE Helpers
+
+
+def GetScaleGrid(newFaveModeIdx=0, rootNote=0, startOctave=2):
+    global _PadMaps
+    global _scale
+    global _keynote 
+    global _faveModeIdx
+    global _faveNoteIdx
+    global _ScaleNotes 
+    global _ScaleInfo
+
+    _faveNoteIdx = rootNote
+    _faveModeIdx = newFaveModeIdx
+    _scale = _faveModesList[_faveModeIdx][0]
+    _keynote = _faveModesList[_faveModeIdx][1]
+    _ScaleNotes.clear()
+
+    # get lowest octave line
+    lineGrid = [[0] for y in range(8)]
+    notesInScale = GetScaleNoteCount(_scale)
+    
+    #build the lowest 8 notes octave and transpose from there
+    BuildNoteGrid(lineGrid, 8, 1, rootNote, startOctave, _scale)
+    
+    for octave in range(0, 5):
+        for note in range(0, notesInScale):
+            _ScaleNotes.append(lineGrid[note][0] + (12*octave) )
+
+    for colOffset in range(0, 8):
+        for row in range(0, 4): # 3
+            noteVal = lineGrid[colOffset][0] + (12*row)
+            
+
+            revRow = 3-row  # reverse to go from bottom to top
+            rowOffset = 16 * revRow  # 0,16,32,48
+            padIdx = rowOffset + colOffset
+
+            if(row == 3) and (GetScaleNoteCount(_scale) == 7): #chord row
+                _PadMaps[padIdx].MIDINote = noteVal
+                _PadMaps[padIdx].ChordNum = colOffset + 1
+            else:
+                _PadMaps[padIdx].MIDINote = noteVal
+                _PadMaps[padIdx].ChordNum = -1
+
+            _PadMaps[padIdx].IsRootNote = (colOffset == 0) or (colOffset == notesInScale)
+            _PadMaps[padIdx].IsKeyNote = (colOffset == (_keynote-1) ) # 0-based index
+
+    _ScaleInfo = NotesList[_faveNoteIdx] + str(startOctave) + " " + HarmonicScaleNamesT[_scale]
+    #print('Scale:',_ScaleInfo)
+    Fire.DisplayTimedText('Scale: ' + _ScaleInfo)
+
 
 
 def BuildMixers():
@@ -221,11 +301,11 @@ def BuildChannels():
 def BuildPatterns():
     global _Patterns
     global _drumMixerTrk
+    global _FLEX_ParamNames
+    global _FLEX_ParamPages
     
     _Patterns.clear()
 
-
-    #print ("...patterns...")
     # Build a list of FL patterns
     patcount = patterns.patternCount()
 
@@ -238,15 +318,35 @@ def BuildPatterns():
         newPat.FLIndex = patnum
         newPat.Name = patterns.getPatternName(patnum)
         patterns.jumpToPattern(patnum)  # this will activate a channel
-        chan = channels.selectedChannel(0, 0, 1)
+        chan = channels.selectedChannel(0, 0, 1) #this will get us the mixer track ...
         trk = channels.getTargetFxTrack(chan)
         # next gets single element
         newPat.Channel = next(x for x in _Channels if x.FLIndex == chan)
         # next gets single element
         newPat.Mixer = next(x for x in _Mixers if x.FLIndex == trk)
         newPat.Color = getColorFromFL(patterns.getPatternColor(patnum))
-        if(newPat.Name.startswith("FPC")):
-            _drumMixerTrk = trk
+        newPat.PluginName = plugins.getPluginName(chan, -1, 0)
+        newPat.Parameters.clear()
+        paramNames = []
+        paramPages = ["Filter"]
+
+        #handle known plugins
+        if(newPat.PluginName == 'FLEX'):
+            #print('FLEX Detected.', _FLEX_ParamNames)
+            paramNames = _FLEX_ParamNames
+            paramPages = _FLEX_ParamPages
+
+        newPat.ParamPages = paramPages 
+        newPat.ParamPageIdx = 0
+
+        #build the list
+        if( len(paramNames) > 0 ):
+            for paramName in paramNames:
+                newParam = FindParameter(chan, paramName, False)
+                newPat.Parameters.append( newParam ) 
+                print('......Param', newParam.Offset, newParam.Caption, newParam.Value, newParam.Bipolar)
+
+
         _Patterns.append(newPat)
         print('......Pattern #', patnum, newPat.Name,  # newPat.FLIndex,
               '-->Channel #', newPat.Channel.FLIndex, newPat.Channel.Name,
@@ -325,11 +425,14 @@ def getMixerTrackForChannel(chan):
 def GetBeatLenInMS(div):
     tempo = mixer.getCurrentTempo(0)
     beatlen = (60000/tempo)
-    #print('tempo', tempo, beatlen)
     if(div > 0 ):
-        return (beatlen/div) * 1000 #
+        timeval = (beatlen/div) * 1000 #
     else: #when div = 0...
-        return  beatlen * 4000 # one bar
+        timeval = beatlen * 4000 # one bar
+    barlen = playlist.getVisTimeTick()
+    #print('tempo', tempo, 'div', div, ':', beatlen, timeval, barlen) 
+    return timeval
+    
 
 def MuteMixerTrack(trk, newVal=-1):
     global _Patterns
@@ -433,8 +536,15 @@ def isModeUser2():
 
 def isAllowed():
     # todo check some other things like number of tracks, etc...
-    val = (_Fire.CurrentMode == device_Fire.ModeDrum) and (_Fire.CurrentDrumMode == device_Fire.DrumModeFPC) and (_IsActive == True)
-    #print('isAllowed', val) 
+    #val = (_Fire.CurrentMode == device_Fire.ModeDrum) and (_Fire.CurrentDrumMode == device_Fire.DrumModeFPC) and (_IsActive == True)
+    currMode = _Fire.CurrentMode
+
+    val = (currMode == _OpMode) and (_IsActive == True)
+
+    if(_OpMode == device_Fire.ModeDrum): #force to only work in FPC Left 
+        val = val and (_Fire.CurrentDrumMode == device_Fire.DrumModeFPC)
+
+#    print('Mode', _Fire.CurrentMode, _IsActive, 'hasPatterns', len(_Patterns) , 'isAllowed', val) 
     return val 
 
 
@@ -589,7 +699,7 @@ def OnRefreshPlayback(fire, playingNote):
 
     Update_Fire(fire)
 
-    if(not isAllowed()):
+    if(not isAllowed()) or (len(_Patterns) == 0):
         return False    
 
     if(playingNote >= 0) and (_playingNote != playingNote):
@@ -600,15 +710,18 @@ def OnRefreshPlayback(fire, playingNote):
     if( (playingNote >= 0) or (len(fire.PlayingNotes) > 0) ):
         
         if(transport.isPlaying()):
-            ShowNote(playingNote)
-            _lastNote = playingNote
+            if(_lastNote != playingNote):
+                ShowNote(playingNote)
+                _lastNote = playingNote
         else: #stopped
             ShowNote(-1)
             _lastNote = -1
+            RefreshPerformancePads(fire)
     else:
         if(_lastNote != -1):
             _lastNote = -1
             ShowNote(-1)
+            RefreshPerformancePads(fire)
         
     return True 
 
@@ -617,6 +730,9 @@ def OnRefreshPlayback(fire, playingNote):
 # called from TFire.OnIdle
 def OnFPCPadPress(fire, event, m):
     Update_Fire(fire)
+
+    if(len(_Patterns) == 0): #nothing to do...
+        return
 
     # this is so I can consistently only call OnXXXXXX functions from device_Fire
     #as well as do the isAllowed check.
@@ -628,6 +744,8 @@ def OnFPCPadPress(fire, event, m):
 def OnPadPress(fire, event):
     Update_Fire(fire)
 
+
+
     # this is so I can consistently only call OnXXXXXX functions from device_Fire
     #as well as do the isAllowed check.
     if(isAllowed()):  
@@ -635,9 +753,13 @@ def OnPadPress(fire, event):
 
 
 def OnMidiIn(fire, event):
-    Update_Fire(fire)
-    #if(isAllowed()):
-        #print("Midi-In:", event.data1, event.data2, fire.LastRawData1, fire.LastRawData2)
+    #here we should get the RAW control number from the AKAI
+    print('OnMidiIn', event.data1, event.data2, event.midiId)  
+
+    if(False): #disable for now
+        if(isAllowed()):
+            Update_Fire(fire)
+            #print("Midi-In:", event.data1, event.data2, fire.LastRawData1, fire.LastRawData2)
 
 # call from TFire.OnIdle
 def OnIdle(fire):
@@ -646,6 +768,9 @@ def OnIdle(fire):
     global _lastPattern
     global _lastFireMode
     Update_Fire(fire)
+
+    if(len(_Patterns) == 0): #nothing to do...
+        return
 
     if(not isAllowed()):
         return
@@ -706,6 +831,15 @@ def OnIdle(fire):
             if(padIdx >= defs.PatternPads[0] ):
                 nfxSetFIRELEDCol(fire, padIdx, col, 0)
         
+def HandleKnob(fire, ID, value, Name, Bipolar):
+    # general.processRECEvent(ID, value, REC_MIDIController)
+    knobres = 1/48
+    print('HandleKnob', ID, value, REC_MIDIController, 0, 1, knobres) 
+    mixer.automateEvent(ID, value, REC_MIDIController, 0, 1, knobres) 
+
+    barVal = device.getLinkedValue(ID)
+    fire.DisplayBar(Name, barVal, Bipolar)
+    
 
 # called from OnMidiMsg, right before the last line
 def OnMidiMsg(fire, event):
@@ -713,46 +847,149 @@ def OnMidiMsg(fire, event):
     global _RepeatNote
     global _IsActive 
     global _playingNote
+    global _ParamPageIdx
+    global _ParamPages
     
-    wasHandled = False
-    Update_Fire(fire)    
+    print('--------------------OnMidiMsg', event.data1, event.data2, event.midiId, 'RAW', fire.LastRawData1)    
+    Update_Fire(fire)
+    wasHandled = event.handled 
+    rawdata1 = fire.LastRawData1
+    PadIndex = -1
 
-    if event.midiId in [MIDI_NOTEON, MIDI_NOTEOFF]:
-        if (event.data1 >= device_Fire.PadFirst) & (event.data1 <= device_Fire.PadLast):
-            event.data1 -= device_Fire.PadFirst  # event.data1 is now 0..63
+    #check if it's one of the 64 pads
+    if (rawdata1 >= device_Fire.PadFirst) & (rawdata1 <= device_Fire.PadLast):
+        PadIndex =  rawdata1 - device_Fire.PadFirst  
+        event.data1 = PadIndex # event.data1 is now 0..63
 
-            PadIndex = event.data1
 
-            if (event.midiId == MIDI_NOTEON):
-                #print('MidiMsg.PadOn=', PadIndex)
+    
 
-                if(fire.AltHeld) and (PadIndex == 57):
+    if (event.midiId in [MIDI_NOTEON, MIDI_NOTEOFF]) and (PadIndex > -1):  # pad was pressed
+        print('....NOTE On/Off:', 'Data:', event.data1 , 'Pad', PadIndex, 'midiId', event.midiId, event.data2 )
+        # this section just checks for the activation sequence
+        if (event.midiId == MIDI_NOTEON):
+            #print('MidiMsg.PadOn=', PadIndex, rawdata1)
+            #toggle active state
+            if(fire.AltHeld) and (PadIndex == 56):
+                _IsActive = not _IsActive 
+                if(not _IsActive):
+                    wasHandled = True  #tell _device_Fire not to process further
+                if(isAllowed() == True):
+                    #fire.AltHeld = False
+                    OnInit(fire)
+                    RefreshFirePads(fire, True)
+                else:
+                    #fire.AltHeld = False
                     ShowSplash(fire)
+                    fire.UpdateCurrentPadsMode
 
-                #toggle active state
-                if(fire.AltHeld) and (PadIndex == 56):
-                    _IsActive = not _IsActive 
-                    if(not _IsActive):
-                        wasHandled = True 
-                        fire.RefreshDrumMode()
-                    
-                    if(isAllowed() == True):
-                        OnInit(fire)
-                        RefreshFirePads(fire, True)
-                    else:
-                        ShowSplash(fire)
-                        fire.UpdateCurrentPadsMode
-                    
+            #wasHandled = True
+            
 
-            if (event.midiId == MIDI_NOTEOFF):
-                _playingNote = -1
-                #print('MidiMsg.PadOff=', PadIndex)
+        if (event.midiId == MIDI_NOTEOFF):
+            wasHandled = False
+            #print('MidiMsg.PadOff=', PadIndex, rawdata1)
 
-            event.handled = wasHandled
+        event.handled = wasHandled
 
-        if(isAllowed()):
-            Update_Fire(fire)
-            RefreshFirePads(fire, False)
+        #if(PadIndex == -1): # this allows the other non pad buttons to complete their function
+        #    return 
+
+    if(not isAllowed()):
+        return
+
+    nfxPat = getSelPat()
+    chanIdx = nfxPat.Channel.FLIndex    
+
+
+    # PadIndex < 0 means something was pressed/moved outside of the the 16x4 pad area
+    # that something has a raw ID that can be accessed from rawdata1 later
+    if((len(_Patterns) > 0) and (event.midiId in [MIDI_NOTEON, MIDI_NOTEOFF]) and (PadIndex == -1) ) : #non Pads trigger note one/off
+        print('....NON pad:', 'Data:', event.data1, 'Pad', PadIndex, 'midiId', event.midiId )
+
+
+        #filter pages, activate on NOTEON only
+        if (rawdata1 in [device_Fire.IDPatternUp, device_Fire.IDPatternDown]) and (event.midiId in [MIDI_NOTEON]): 
+            _ParamPageIdx = nfxPat.ParamPageIdx
+            _ParamPages = nfxPat.ParamPages
+
+            if(event.data1 == device_Fire.IDPatternUp):  
+                _ParamPageIdx -= 1
+            else:
+                _ParamPageIdx += 1
+
+            _ParamPageIdx = _ParamPageIdx % len(_ParamPages)
+
+            nfxPat.ParamPageIdx = _ParamPageIdx 
+            fire.DisplayTimedText(_ParamPages[_ParamPageIdx])
+            event.handled = True                            
+
+        #touced the knob only, display the page
+        if(rawdata1 in [device_Fire.IDKnob3, device_Fire.IDKnob4]): 
+            fire.DisplayTimedText(_ParamPages[_ParamPageIdx])
+            event.handled = True 
+
+     
+
+    # Handle the custom knobs 
+    # I put this in an "if" sectin to keep it separate as it's rather lengthy
+    if (not event.handled) and ( rawdata1 in [device_Fire.IDKnob1, device_Fire.IDKnob2, device_Fire.IDKnob3, device_Fire.IDKnob4] ): 
+        event.inEv = event.data2
+        if event.inEv >= 0x40:
+            event.outEv = event.inEv - 0x80
+        else:
+            event.outEv = event.inEv
+        event.isIncrement = 1
+        eventId = channels.getRecEventId(chanIdx) 
+
+        # check if a pad is being held for the FPC params
+        pMapPressed = next((x for x in _PadMaps if x.Pressed == 1), None) 
+        padNumber = -1
+
+        #Channel Mode
+        if fire.CurrentKnobsMode == device_Fire.KnobsModeChannelRack:
+
+            #hanled pressed FPC pads + volumen/pan on Knob 1 and 2                
+            if(pMapPressed != None) and (rawdata1 in [device_Fire.IDKnob1, device_Fire.IDKnob2]) and (_showFPCColors):
+
+                if(pMapPressed.PadIndex in defs.FPC_APads_FL):
+                    padNumber = defs.FPC_APads_FL.index(pMapPressed.PadIndex)
+                elif(pMapPressed.PadIndex in defs.FPC_BPads_FL):
+                    padNumber = defs.FPC_BPads_FL.index(pMapPressed.PadIndex)+64 # internal offset for FPC Params Bank B
+                
+                #if we get a valid FPC pad...
+                if(padNumber > -1):
+                    #defaults for pad volume   
+                    paramOffs = 0
+                    desc = 'Pad Volume'
+                    bipolar = False
+                    if(event.data1 == device_Fire.IDKnob2): # pad pan  when knob2
+                        paramOffs = 16
+                        desc = 'Pad Pan'
+                        bipolar = True
+                    HandleKnob(fire, eventId + REC_Chan_Plugin_First + paramOffs + padNumber, event.outEv, desc, bipolar)
+                    event.handled = True
+            
+            elif rawdata1 == device_Fire.IDKnob3:
+                pOffs = 2*_ParamPageIdx
+                #print('KNOB3', 'Param', nfxPat.Parameters[pOffs].Offset, nfxPat.Parameters[pOffs].Caption, 'Page', pOffs )
+                #HandleKnob(fire, eventId + REC_Chan_Plugin_First + nfxPat.FilterParam, event.outEv, 'Master Filter', False)
+                HandleKnob(fire, eventId + REC_Chan_Plugin_First + nfxPat.Parameters[pOffs].Offset, event.outEv, 
+                    nfxPat.Parameters[pOffs].Caption, nfxPat.Parameters[pOffs].Bipolar)
+                event.handled = True
+            elif event.data1 == device_Fire.IDKnob4:
+                pOffs = 1+2*_ParamPageIdx
+                #print('KNOB4', 'Param', nfxPat.Parameters[pOffs].Offset, nfxPat.Parameters[pOffs].Caption, 'Page', pOffs )
+                #HandleKnob(fire, eventId + REC_Chan_Plugin_First + nfxPat.ResParam, event.outEv, 'Master Resonance', False)
+                HandleKnob(fire, eventId + REC_Chan_Plugin_First + nfxPat.Parameters[pOffs].Offset, event.outEv, 
+                    nfxPat.Parameters[pOffs].Caption, nfxPat.Parameters[pOffs].Bipolar)
+                event.handled = True
+
+    print('--------------------OnMidiMsg.OUT', event.data1, event.data2, event.midiId, 'RAW', fire.LastRawData1)    
+
+
+
+
 
 # endregion
 
@@ -796,37 +1033,30 @@ def RefreshSongPos(fire):
 
 
 def RefreshPatternPads(fire):
+    # Pattern Pads -- top row
     global _Patterns
     Update_Fire(fire)
-#    if not isAllowed():
-#        return
-    # Pattern Pads -- top row
-    for trk in defs.PatternChannels:  # list of 8 channels, 1...8
-        patIdx = trk - 1  # 0 based
-        nfxPat = _Patterns[patIdx]
-        pad = defs.PatternPads[patIdx]  # pad index
-        # color = PatternColors[patIdx] # color index
-        color = nfxPat.Color
-        dim = 4
 
-        vis = playlist.getTrackActivityLevelVis(nfxPat.FLIndex)
-        if(vis > 0 ):
-            dim = 3 
-        if(vis > 33):
-            dim = 2
-        if (vis > 66): 
-            dim = 1
-        if(vis > 80):
-            dim = 0 
-
-        if (nfxPat.FLIndex == _selectedPattern):
-            dim = dim - 1 
-
-        nfxSetFIRELEDCol(fire, pad, color, dim)
-
-#        if(nfxPat.Muted == 1):
-#            if _nfxBlinkTimer < _nfxBlinkSpeed:
-#                nfxSetFIRELEDCol(fire, pad, color, 4)
+    if(len(_Patterns) == 0): #nothing to do...
+        return
+    
+    for pad in defs.PatternPads:  # list of pads used for patterns
+        dim = 4 #defs._globalDimDef 
+        nfxPat = _Patterns[defs.PatternPads.index(pad)]   
+        if(transport.isPlaying()):
+            vis = playlist.getTrackActivityLevelVis(nfxPat.FLIndex)
+            if(vis > 70):
+                dim = 0 
+            elif (vis > 40): 
+                dim = 1
+            elif(vis > 20):
+                dim = 2
+            elif(vis > 0 ):
+                dim = 3 
+        else:
+            if(_selectedPattern == nfxPat.FLIndex):
+                dim = 0
+        nfxSetFIRELEDCol(fire, pad, nfxPat.Color, dim)
 
 
 def RefreshFirePads(fire, clearfirst):
@@ -859,28 +1089,17 @@ def RefreshFirePads(fire, clearfirst):
 
     RefreshPerformancePads(fire)
 
-    if(False):  # if true, will hide FPC
-        # FPC A Pads
-        for p in FPC_APads:
-            nfxSetFIRELEDCol(fire, p, cOff, 3)
-
-        for p in FPC_BPads:
-            nfxSetFIRELEDCol(fire, p, cOff, 3)
-
 
 def RefreshPerformancePads(fire):
     global _PadMaps
     Update_Fire(fire)
     if not isAllowed():
         return
-
     
     GC_BackgroundColor = 0
     GC_Semitone = 1
 
     pat = getSelPat()
-
-    #print('FPC', _showFPCColors)
 
     if(_showFPCColors):  # Show Custom FPC Colors
         chanIdx = pat.Channel.FLIndex
@@ -891,13 +1110,13 @@ def RefreshPerformancePads(fire):
             col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx)
             _PadMaps[p].FPCColor = getColorFromFL(col)
             nfxSetFIRELEDCol(fire, p, getColorFromFL(col), dim)
-            fpcpadIdx += 1
+            fpcpadIdx += 1 # will be 16 when we exit the for loop, the proper first value for the B Pads loop...
         # FPC B Pads
         for p in defs.FPC_BPads_FL:
             col = plugins.getColor(chanIdx, -1, GC_Semitone, fpcpadIdx)
             _PadMaps[p].FPCColor = getColorFromFL(col)
             nfxSetFIRELEDCol(fire, p, getColorFromFL(col), dim)
-            fpcpadIdx += 1
+            fpcpadIdx += 1 # continue 
     else:
         for p in defs.Perf_Pads:
             dim = defs._globalDimDef
@@ -1000,56 +1219,6 @@ def RefreshChannelPads(fire):
 
 
 
-def GetScaleGrid(newFaveModeIdx=0, rootNote=0, startOctave=2):
-    global _PadMaps
-    global _scale
-    global _keynote 
-    global _faveModeIdx
-    global _faveNoteIdx
-    global _ScaleNotes 
-    global _ScaleInfo
-
-    _faveNoteIdx = rootNote
-    _faveModeIdx = newFaveModeIdx
-    _scale = _faveModesList[_faveModeIdx][0]
-    _keynote = _faveModesList[_faveModeIdx][1]
-    _ScaleNotes.clear()
-
-    # get lowest octave line
-    lineGrid = [[0] for y in range(8)]
-    notesInScale = GetScaleNoteCount(_scale)
-    
-    #build the lowest 8 notes octave and transpose from there
-    BuildNoteGrid(lineGrid, 8, 1, rootNote, startOctave, _scale)
-    
-    for octave in range(0, 5):
-        for note in range(0, notesInScale):
-            _ScaleNotes.append(lineGrid[note][0] + (12*octave) )
-
-    for colOffset in range(0, 8):
-        for row in range(0, 4): # 3
-            noteVal = lineGrid[colOffset][0] + (12*row)
-            
-
-            revRow = 3-row  # reverse to go from bottom to top
-            rowOffset = 16 * revRow  # 0,16,32,48
-            padIdx = rowOffset + colOffset
-
-            if(row == 3) and (GetScaleNoteCount(_scale) == 7): #chord row
-                _PadMaps[padIdx].MIDINote = noteVal
-                _PadMaps[padIdx].ChordNum = colOffset + 1
-            else:
-                _PadMaps[padIdx].MIDINote = noteVal
-                _PadMaps[padIdx].ChordNum = -1
-
-            _PadMaps[padIdx].IsRootNote = (colOffset == 0) or (colOffset == notesInScale)
-            _PadMaps[padIdx].IsKeyNote = (colOffset == (_keynote-1) ) # 0-based index
-
-    _ScaleInfo = NotesList[_faveNoteIdx] + str(startOctave) + " " + HarmonicScaleNamesT[_scale]
-    print('Scale:',_ScaleInfo)
-    Fire.DisplayTimedText('Scale: ' + _ScaleInfo)
-
-
 def RefreshMacroPads(fire):
     # Macro Pads - Third row
     Update_Fire(fire)
@@ -1088,21 +1257,23 @@ def HandleControlPress(fire, event):
     Update_Fire(fire)
     RefreshFirePads(fire, False)
 
-def ShowNote(note):
-    global _lastNote 
-
+def ShowNote(note, isOn = True):
+    #print('ShowNote', note, isOn)
     for pIdx in defs.Perf_Pads:
         pad = _PadMaps[pIdx]
         if(_showFPCColors):
             if(pad.FPCNote == note):
-                nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.FPCColor, defs._globalDimMax)    
-            if(pad.FPCNote == _lastNote):
-                nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.FPCColor, defs._globalDimDef)    
+                if(isOn):
+                    nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.FPCColor, defs._globalDimMax)    
+                else:
+                    #nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.FPCColor, defs._globalDimDef)    
+                    RefreshPatternPads(_Fire)
         else:
             if(pad.MIDINote == note):
-                nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.Color, defs._globalDimMax)
-            if(pad.MIDINote == _lastNote):
-                nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.Color, defs._globalDimDef)
+                if(isOn):
+                    nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.Color, defs._globalDimMax)
+                else:
+                    nfxSetFIRELEDCol(_Fire, pad.PadIndex, pad.Color, defs._globalDimDef)
 
 def HandleChord(chan, chordNum, noteOn, play7th, playInverted):
     #
@@ -1138,11 +1309,8 @@ def HandleChord(chan, chordNum, noteOn, play7th, playInverted):
 
     if(noteOn):
         #
-        channels.midiNoteOn(chan, note, _velocity)
-        channels.midiNoteOn(chan, note3, _velocity)
-
-        ShowNote(note)
-        ShowNote(note3)
+        PlayMIDINote(chan, note, _velocity)
+        PlayMIDINote(chan, note3, _velocity)
 
         _ChordNum = chordNum
         _ChordInvert = playInverted
@@ -1150,32 +1318,36 @@ def HandleChord(chan, chordNum, noteOn, play7th, playInverted):
 
         if(play7th):
             chordName += '7'
-            channels.midiNoteOn(chan, note7, _velocity)        
-            ShowNote(note7)
+            PlayMIDINote(chan, note7, _velocity)        
 
         if(playInverted):
             chordName += ' inv'
-            channels.midiNoteOn(chan, note5inv, _velocity)
-            ShowNote(note5inv)
+            PlayMIDINote(chan, note5inv, _velocity)
         else:
-            channels.midiNoteOn(chan, note5, _velocity)
-            ShowNote(note5)
+            PlayMIDINote(chan, note5, _velocity)
+
 
         _Fire.DisplayTimedText(chordName)
 
     else:
         # turn off the chord
-        channels.midiNoteOn(chan, note, _velocityoff)
-        channels.midiNoteOn(chan, note3, _velocityoff)
-        channels.midiNoteOn(chan, note5, _velocityoff)
-        channels.midiNoteOn(chan, note5inv, _velocityoff)
-        channels.midiNoteOn(chan, note7, _velocityoff)
+        PlayMIDINote(chan, note, _velocityoff)
+        PlayMIDINote(chan, note3, _velocityoff)
+        PlayMIDINote(chan, note5, _velocityoff)
+        PlayMIDINote(chan, note5inv, _velocityoff)
+        PlayMIDINote(chan, note7, _velocityoff)
         _ChordInvert = False
         _ChordNum = -1
         _Chord7th = play7th
 
         
-
+def PlayMIDINote(chan, note, velocity):
+    if(velocity > 0):
+        channels.midiNoteOn(chan, note, velocity)
+        ShowNote(note, True)
+    else:
+        channels.midiNoteOn(chan, note, _velocityoff)
+        ShowNote(note, False)
 
 
 
@@ -1186,6 +1358,7 @@ def HandlePerformancePads(fire, event, m):
     global _ChordNum
     global _Chord7th 
     global _rptEvent
+    global _PadMaps
     wasHandled = False
 
     chan = channels.channelNumber()
@@ -1214,7 +1387,7 @@ def HandlePerformancePads(fire, event, m):
     
     #
     vel = event.data2
-    tdiv = 1
+    tdiv = 0
     rptTime = GetBeatLenInMS(tdiv)
 
     if(_showFPCColors):
@@ -1234,8 +1407,9 @@ def HandlePerformancePads(fire, event, m):
         padNoteVal = note
 
     if event.midiId == MIDI_NOTEON:
-
-        nfxSetFIRELEDCol(fire, padIdx, cRed, 0)    #pressed pad color    
+        #print('handleperf')
+        nfxSetFIRELEDCol(fire, padIdx, cRed, 0)    #pressed pad color   
+        pMap.Pressed = 1 
 
         if (chord == 8): #toggle
             _Chord7th = not _Chord7th
@@ -1259,23 +1433,27 @@ def HandlePerformancePads(fire, event, m):
                 event.data1 = padNoteVal
                 rptTime = GetBeatLenInMS(4)
                 print('-----------> Note', note, 'NewNote', padNoteVal, rptTime)
-                channels.midiNoteOn(chan, note, _velocity) #single note
+                PlayMIDINote(chan, note, _velocity) #single note
                 device.repeatMidiEvent(event, int(rptTime), int(rptTime) )
                 _rptEvent = event
                 event.handled = True
             else: 
-                channels.midiNoteOn(chan, note, _velocity) #single note
-                
+                PlayMIDINote(chan, note, _velocity) #single note
+    
+    if event.midiId == MIDI_NOTEOFF:
 
-    else:
+        pMap.Pressed = 0
 
         #RefreshFPCPads(fire)        #turn off 'pressed' color
-        nfxSetFIRELEDCol(fire, padIdx, _PadMaps[padIdx].Color, 2)    #released pad color    
+        if(_showFPCColors):
+            nfxSetFIRELEDCol(_Fire, padIdx, _PadMaps[padIdx].FPCColor, defs._globalDimDef)
+        else:
+            nfxSetFIRELEDCol(fire, padIdx, _PadMaps[padIdx].Color, defs._globalDimDef)    #released pad color    
 
         if (0 < chord < 8):
             HandleChord(chan, chord, False, _Chord7th, _ChordInvert)
         else:
-            channels.midiNoteOn(chan, note, _velocityoff) # SINGLE NOTE
+            PlayMIDINote(chan, note, _velocityoff) # SINGLE NOTE
 
         #print('FPC', event.data1, 'OFF', _RepeatNote)
         if(_RepeatNote) and (_IsRepeating):
@@ -1295,11 +1473,12 @@ def HandlePadPress(fire, event):
     _lastEvent.status = event.status
 
     # do this before getting the padIndex
-    if (fire.CurrentDrumMode == device_Fire.DrumModeFPC):
+    if (fire.CurrentDrumMode == device_Fire.DrumModeFPC):        
         # reset the offset to get the correct pad index  - bug in the device_Fire code??
         event.data1 -= 4
 
     padIndex = event.data1
+
     if (event.midiId in [MIDI_NOTEON]):
 
         # turn led white when pressed.
@@ -1420,6 +1599,7 @@ def HandleMacros(fire, event, PadIndex):
 
         if MacroIndex == 2:
             if(fire.AltHeld):
+                xx = GetBeatLenInMS(0)
                 print('repeat is disabled') #ToggleRepeat() #
             else:
                 NextSnap()
@@ -1453,6 +1633,24 @@ def HandleMacros(fire, event, PadIndex):
                 ShowPluginInfo()
             else:
                 SetAllMutes(-1) # toggle
+
+def FindParameter(chanIdx, paramNameToFind, bipolar):
+    pCnt = plugins.getParamCount(chanIdx, -1)
+    for pOffset in range(0, pCnt):
+        paramName = plugins.getParamName(pOffset, chanIdx, -1) 
+        paramValue = plugins.getParamValue(pOffset, chanIdx, -1) 
+        if(paramNameToFind == paramName):
+            return TnfxParameter(paramName, pOffset, paramValue, bipolar)
+    return TnfxParameter('', 0, 0, False) 
+    
+def FindParamOffset(chanIdx, paramNameToFind):
+    pCnt = plugins.getParamCount(chanIdx, -1)
+    for param in range(0, pCnt):
+        paramName = plugins.getParamName(param, chanIdx, -1) 
+        paramValue = plugins.getParamValue(param, chanIdx, -1) 
+        if(paramNameToFind == paramName):
+            return param
+    return -1
 
 def ShowPluginInfo():
     chanIdx = getSelPat().Channel.FLIndex
@@ -1521,12 +1719,14 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
     global _showFPCColors
     global _drumMixerTrk
     global _IsActivating
-
+    global _ParamPages
+    global _ParamPageIdx
+    
     if(_IsActivating):
         return
 
     _IsActivating = True
-  
+    
     statusLine = ""
 
     nfxPat = _Patterns[patNum-1]  # 0 based
@@ -1580,7 +1780,9 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
     _selectedPattern = nfxPat.FLIndex
     chanidx = nfxPat.Channel.FLIndex
     pluginName = plugins.getPluginName(chanidx, -1, 0)    
-    
+    _ParamPages = nfxPat.ParamPages
+    _ParamPageIdx = nfxPat.ParamPageIdx 
+
     if(setMixer):
         mixer.setTrackNumber(mixerNum)
 
@@ -1597,9 +1799,9 @@ def ActivatePattern(patNum, showPlugin=False, setMixer=True):
         channels.muteChannel(chanidx)
 
 
-    _showFPCColors = (pluginName == 'FPC') # nfxPat.Name.startswith('FPC') or nfxPat.Name.startswith('...FPC')
+    _showFPCColors = (pluginName == 'FPC') 
 
-    RefreshPerformancePads(_Fire)
+    #RefreshPerformancePads(_Fire)
         
     if(showPlugin): #when false show NO windows
         ui.showWindow(widPlugin)  # wid was missing from midi.py

@@ -33,7 +33,8 @@ _lsLen3 = 128
 #define the pads to use for macros and their colors and names
 MacroPads = [40, 41, 42, 43, 44, 45, 46, 47]
 MacroColors = [cWhite, cWhite, cCyan, cMagenta, cRed, cDimWhite, cDimWhite, cBlueDark]
-MacroNames = ['', '',   '', '', '', '', '', '']
+MacroNames    = ['Set Velocity', 'Set Octave',  'Set Snap', 'Copy MIDI',  'Clear MIDI',     'Mute Preset1',     'Mute Preset2',     'Toggle Mute']
+MacroAltNames = ['Set Root',     'Set Scale',   'Note Rpt', 'Paste MIDI', 'Clear ALL MIDI', 'Set Mute Preset1', 'Set Mute Preset2', '']
 
 #these define the pads to use for the progress indicator
 ProgressPads = [56, 57, 58, 59, 60, 61, 62, 63]
@@ -42,15 +43,8 @@ ProgressPadsOn = cWhite
 
 #note these are referenced via the AKAI PadIndex (0..63)
 # and NOT the FPC Pad num. AKAI runs top left to bottom right
-# whereas FPC runs bottom left to top right for A and again for B
-FPC_APads = [0,1,2,3,
-             16, 17, 18, 19,
-             32, 33, 34, 35,
-             48, 49, 50 , 51]
-FPC_BPads = [4, 5, 6, 7,
-             20, 21, 22, 23,
-             36, 37, 38, 39, 
-             52, 53, 54, 55]
+FPC_APads = [0, 1, 2, 3, 16, 17, 18, 19,32, 33, 34, 35, 48, 49, 50, 51]
+FPC_BPads = [4, 5, 6, 7, 20, 21, 22, 23,36, 37, 38, 39, 52, 53, 54, 55]
 
 #these define the FL Studio index running from bottom left to top right for the A Pads and B Pads separately
 FPC_APads_FL = [48, 49, 50, 51, 32, 33, 34, 35, 16, 17, 18, 19, 0, 1, 2, 3]
