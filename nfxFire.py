@@ -148,7 +148,7 @@ _FLEX_ParamNames =  ["Master filter cutoff",  "Master filter resonance",   # pag
                      "Reverb mix",            "Reverb size",               # page 3
                      "Reverb decay",          "Reverb color" ]             # page 4
 
-_ParamPageIdx = 0 # 0-based
+_ParamPageIdx = 0 # 0-based 
 
 # snap defs are in MIDI.py aka Snap_Cell, Snap_line, etc
 _snapModes = ["Default", "Line", "?", "Cell", "None",
