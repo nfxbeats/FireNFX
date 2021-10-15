@@ -2158,7 +2158,11 @@ class TFire():
                     elif self.PlayingNotes.find(self.GetSlicexNoteValue(x + y * PadsStride)) >= 0:
                         AddPadDataRGB2(x, y, colors[2]) # playing note (by the user)
                     else:
-                        AddPadDataRGB2(x, y, colors[5]) # default pad color
+                        col = colors[5]
+                        if((x % 4) == 0):
+                            col = colors[4]
+
+                        AddPadDataRGB2(x, y, col) # default pad color
 
         elif self.CurrentDrumMode == DrumModeOmni:  # show a pad per channel
             maxChan = min(channels.channelCount(), 64)
@@ -3140,6 +3144,12 @@ class TFire():
       self.ClearBtnMap()
 
 Fire = TFire()
+
+def OnNoteOn(event):
+    nfxFire.OnNoteOnOff(event, True)
+
+def OnNoteOff(event):
+    nfxFire.OnNoteOnOff(event, False)
 
 def OnInit():
     Fire.OnInit()

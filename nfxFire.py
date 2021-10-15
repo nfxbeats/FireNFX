@@ -30,6 +30,12 @@ widPlugin = 5  # missing from midi.py
 
 # region Classes
 
+class TnfxPlugin:
+    def __init__(self):
+        self.Name = ''
+        self.UserName = ''
+        self.Parameters = list() #
+
 class TnfxParameter:
     def __init__(self, caption, offset, value, bipolar):
         self.Offset = offset 
@@ -136,19 +142,21 @@ _PadMaps = list()
 _Patterns = list()
 _Channels = list()
 _Mixers = list()
-#_MutedTracks = list()
 _ScaleNotes = list()
 _playingNote = -1
 
 _ParamPages = ['Filt / Reso']
+_ParamPageIdx = 0 # 0-based 
+
+_StrumGS2_Articulations = [24, 25, 26, # up/ mute/ down
+                           28, 29, 31, 33, 35 #picked 
+                           ]
 
 _FLEX_ParamPages =  ["Filter", "Delay", 'Reverb 1', 'Reverb 2']
 _FLEX_ParamNames =  ["Master filter cutoff",  "Master filter resonance",   # page 1
                      "Delay mix",             "Delay time",                # page 2
                      "Reverb mix",            "Reverb size",               # page 3
                      "Reverb decay",          "Reverb color" ]             # page 4
-
-_ParamPageIdx = 0 # 0-based 
 
 # snap defs are in MIDI.py aka Snap_Cell, Snap_line, etc
 _snapModes = ["Default", "Line", "?", "Cell", "None",
@@ -160,8 +168,8 @@ _snapModes = ["Default", "Line", "?", "Cell", "None",
 SnapModesList = [Snap_Beat, Snap_HalfBeat, Snap_ThirdBeat, Snap_Step, Snap_HalfStep, Snap_ThirdStep, Snap_None]
 _initialSnapIndex = 1 #initial value - index of above - 0-based
 _repeatSnapIdx = 4 # for repeat mode
-_initialSnap = SnapModesList[_initialSnapIndex]
-_repeatSnap = SnapModesList[_repeatSnapIdx]
+#_initialSnap = SnapModesList[_initialSnapIndex]
+#_repeatSnap = SnapModesList[_repeatSnapIdx]
 _snapIdx = _initialSnapIndex
 
 #define the list of velocities
@@ -202,7 +210,6 @@ _octaveIdx = 2 #index of above.
 
 # region nfx/FL/FIRE Helpers
 
-
 def GetScaleGrid(newFaveModeIdx=0, rootNote=0, startOctave=2):
     global _PadMaps
     global _scale
@@ -224,7 +231,7 @@ def GetScaleGrid(newFaveModeIdx=0, rootNote=0, startOctave=2):
     
     #build the lowest 8 notes octave and transpose from there
     BuildNoteGrid(lineGrid, 8, 1, rootNote, startOctave, _scale)
-    
+
     for octave in range(0, 5):
         for note in range(0, notesInScale):
             _ScaleNotes.append(lineGrid[note][0] + (12*octave) )
@@ -252,14 +259,11 @@ def GetScaleGrid(newFaveModeIdx=0, rootNote=0, startOctave=2):
     #print('Scale:',_ScaleInfo)
     Fire.DisplayTimedText('Scale: ' + _ScaleInfo)
 
-
-
 def BuildMixers():
     global _Mixers
     #print ("...mixer tracks...")
     empty = 0
     _Mixers.clear()
-#    _MutedTracks.clear()
     trkCount = mixer.trackCount()
     for trkNum in range(0, trkCount):
         newMixer = TnfxMixer()
@@ -279,7 +283,6 @@ def BuildMixers():
             if(empty == 5):
                 return
 
-
 def BuildChannels():
     global _Channels
     _Channels.clear()
@@ -296,7 +299,6 @@ def BuildChannels():
         newChan.Mixer = next(x for x in _Mixers if x.FLIndex == trk)
         _Channels.append(newChan)
         #print('Channel added:', newChan.Name, newChan.FLIndex, 'Mixer:', newChan.Mixer.Name, newChan.Mixer.FLIndex)
-
 
 def BuildPatterns():
     global _Patterns
@@ -352,8 +354,6 @@ def BuildPatterns():
               '-->Channel #', newPat.Channel.FLIndex, newPat.Channel.Name,
               '-->Mixer #', trk, newPat.Mixer.FLIndex, newPat.Mixer.Name)
 
-
-
 def ColorAdjBright(col, adjFactor):
     #
     r = (col  >> 16 ) & 0xFF
@@ -372,9 +372,6 @@ def ColorAdjBright(col, adjFactor):
     
     return ( int(r) << 16) + ( int(g) << 8) +  int(b)
 
-
-
-
 def nfxSetFIRELEDCol(fire, idx, col, dimFactor):
     #print('SetLEDCol', idx, col)
     r = (col & 0x7F0000) >> 16
@@ -390,7 +387,6 @@ def nfxSetFIRELEDCol(fire, idx, col, dimFactor):
 
     nfxSetFIRELED(fire, idx, r, g, b)
 
-
 def nfxSetFIRELED(fire, idx, r, g, b):  # (x, y, r, g, b):
     #print('SetLED', idx, r, g, b)
     dataOut = bytearray(4)
@@ -402,10 +398,8 @@ def nfxSetFIRELED(fire, idx, r, g, b):  # (x, y, r, g, b):
     fire.SendMessageToDevice(
         device_Fire.MsgIDSetRGBPadLedState, len(dataOut), dataOut)
 
-
 def getSelPat():
     return _Patterns[_selectedPattern-1]  # 0 based
-
 
 def getMixerTrackForPattern(pat):
     trkNum = -1
@@ -417,10 +411,8 @@ def getMixerTrackForPattern(pat):
     #print('pattern', pat, 'mixer', trkNum )
     return trkNum
 
-
 def getMixerTrackForChannel(chan):
     return channels.getTargetFxTrack(chan)
-
 
 def GetBeatLenInMS(div):
     tempo = mixer.getCurrentTempo(0)
@@ -432,7 +424,6 @@ def GetBeatLenInMS(div):
     barlen = playlist.getVisTimeTick()
     #print('tempo', tempo, 'div', div, ':', beatlen, timeval, barlen) 
     return timeval
-    
 
 def MuteMixerTrack(trk, newVal=-1):
     global _Patterns
@@ -448,8 +439,6 @@ def MuteMixerTrack(trk, newVal=-1):
 
     _Patterns[patIdx].Muted = newVal
     MutePlaylistTrack(pat.FLIndex, newVal)
-    
-
 
 def MutePlaylistTrack(pltrk, newVal=-1, refresh = True):
     #called from MuteMixerTrack
@@ -479,7 +468,6 @@ def MutePlaylistTrack(pltrk, newVal=-1, refresh = True):
         patterns.jumpToPattern(-1)
         patterns.jumpToPattern(_selectedPattern)
 
-
 def getColorFromFL(FLColor):
     #FLColor = channels.getChannelColor(n)
     h, s, v = utils.RGBToHSVColor(FLColor)
@@ -489,17 +477,13 @@ def getColorFromFL(FLColor):
     g = ((FLColor >> 8) & 0xFF) // 2
     return utils.RGBToColor(r, g, b)
 
-
 def getPadMapFromPadNum(padnum):
     return _PadMaps[padnum]
-
 
 def getPadMapFromPatternNum(patnum):
     for pMap in _PadMaps:
         if(pMap.PatternIndex == patnum):
             return pMap
-
-
 
 def setSnapMode(newmode):
     mode = ui.getSnapMode()
@@ -512,27 +496,21 @@ def setSnapMode(newmode):
 
     _Fire.DisplayTimedText('Snap: ' + _snapModes[mode+1])
 
-
 def ResetMutes():
     for mix in _Mixers:
         mixer.muteTrack(mix.FLIndex, 0)
 
-
 def isModeMixer():
     return _Fire.CurrentKnobsMode == device_Fire.KnobsModeMixer
-
 
 def isModeChannel():
     return _Fire.CurrentKnobsMode == device_Fire.KnobsModeChannelRack
 
-
 def isModeUser1():
     return _Fire.CurrentKnobsMode == device_Fire.KnobsModeUser1
 
-
 def isModeUser2():
     return _Fire.CurrentKnobsMode == device_Fire.KnobsModeUser2
-
 
 def isAllowed():
     # todo check some other things like number of tracks, etc...
@@ -543,10 +521,8 @@ def isAllowed():
 
     if(_OpMode == device_Fire.ModeDrum): #force to only work in FPC Left 
         val = val and (_Fire.CurrentDrumMode == device_Fire.DrumModeFPC)
-
 #    print('Mode', _Fire.CurrentMode, _IsActive, 'hasPatterns', len(_Patterns) , 'isAllowed', val) 
     return val 
-
 
 def ShowPianoRoll(showVal):
     global _Patterns
@@ -576,7 +552,6 @@ def ShowPianoRoll(showVal):
 
     #print('ShowPR: ', _Patterns[selPatIdx].ShowPianoRoll)
 
-
 def ShowChannelSettings(showVal):
     global _Patterns
     selPatIdx = _selectedPattern-1  # 0 based
@@ -595,7 +570,6 @@ def ShowChannelSettings(showVal):
     channels.showCSForm(chanNum, showVal)
     _Patterns[selPatIdx].ShowChannelSettings = showVal
     #print('ShowCS: ', _Patterns[selPatIdx].ShowChannelSettings)
-
 
 def ShowChannelEditor(showVal):
     global _Patterns
@@ -642,9 +616,9 @@ def ToggleRepeat():
     if(not _RepeatNote):
         device.stopRepeatMidiEvent()
         _IsRepeating = False
-        #setSnapMode(SnapModesList[_snapIdx])
-   # else:
-        #setSnapMode(SnapModesList[_snapIdx])
+        setSnapMode(SnapModesList[_repeatSnapIdx])
+    else:
+        setSnapMode(SnapModesList[_snapIdx])
 
 def NextRootNote():
     global _faveNoteIdx
@@ -668,16 +642,19 @@ def ShowSplash(fire):
 
     for row in range(4):
         for pad in range(16):
-            nfxSetFIRELEDCol(fire, pad + (16*row), cWhite, 0)
+            padIdx = pad + (16*row)
+            if(padIdx in defs._SplashOverlay):
+                nfxSetFIRELEDCol(fire, padIdx, cGreen, 1)
+            else:
+                nfxSetFIRELEDCol(fire, padIdx, cWhite, 2)
+
         time.sleep(.0125) 
 
+    #time.sleep(1)
     for row in range(4):
         for pad in range(16):
-            nfxSetFIRELEDCol(fire, pad + (16*row), cOff, 0)
+            nfxSetFIRELEDCol(fire, padIdx, cOff, 0)
         time.sleep(.0125) 
-
-
-
 
 # endregion
 
@@ -756,10 +733,15 @@ def OnMidiIn(fire, event):
     #here we should get the RAW control number from the AKAI
     print('OnMidiIn', event.data1, event.data2, event.midiId)  
 
-    if(False): #disable for now
-        if(isAllowed()):
-            Update_Fire(fire)
-            #print("Midi-In:", event.data1, event.data2, fire.LastRawData1, fire.LastRawData2)
+    if(isAllowed()):
+        Update_Fire(fire)
+        #print("Midi-In:", event.data1, event.data2, fire.LastRawData1, fire.LastRawData2)
+
+        #   Pre filtering / changing of midi messages
+        #   Note On with value 0 --> Note Off  ( code from IPadTouches.com)
+        if (event.status == MIDI_NOTEON) & (event.data2 == 0) :
+            event.status = MIDI_NOTEOFF
+            event.data2 = 0        
 
 # call from TFire.OnIdle
 def OnIdle(fire):
@@ -841,6 +823,13 @@ def HandleKnob(fire, ID, value, Name, Bipolar):
     fire.DisplayBar(Name, barVal, Bipolar)
     
 
+
+
+def OnNoteOnOff(event, isOn):
+    print('NoteOnOff', isOn, event.data1, event.data2)    
+
+
+
 # called from OnMidiMsg, right before the last line
 def OnMidiMsg(fire, event):
     global _IsRepeating
@@ -887,13 +876,10 @@ def OnMidiMsg(fire, event):
             
 
         if (event.midiId == MIDI_NOTEOFF):
-            wasHandled = False
+            wasHandled = event.handled
             #print('MidiMsg.PadOff=', PadIndex, rawdata1)
 
         event.handled = wasHandled
-
-        #if(PadIndex == -1): # this allows the other non pad buttons to complete their function
-        #    return 
 
     if(not isAllowed()):
         return
@@ -1342,12 +1328,14 @@ def HandleChord(chan, chordNum, noteOn, play7th, playInverted):
 
         
 def PlayMIDINote(chan, note, velocity):
-    if(velocity > 0):
-        channels.midiNoteOn(chan, note, velocity)
-        ShowNote(note, True)
-    else:
-        channels.midiNoteOn(chan, note, _velocityoff)
-        ShowNote(note, False)
+    if(True): #(not _IsRepeating) 
+        print('NOTEVal:', note)
+        if(velocity > 0):
+            channels.midiNoteOn(chan, note, velocity)
+            ShowNote(note, True)
+        else:
+            channels.midiNoteOn(chan, note, _velocityoff)
+            ShowNote(note, False)
 
 
 
@@ -1433,8 +1421,8 @@ def HandlePerformancePads(fire, event, m):
                 event.data1 = padNoteVal
                 rptTime = GetBeatLenInMS(4)
                 print('-----------> Note', note, 'NewNote', padNoteVal, rptTime)
-                PlayMIDINote(chan, note, _velocity) #single note
-                device.repeatMidiEvent(event, int(rptTime), int(rptTime) )
+                #PlayMIDINote(chan, note, _velocity) #single note
+                device.repeatMidiEvent(event, int(rptTime), 0 )
                 _rptEvent = event
                 event.handled = True
             else: 
@@ -1459,6 +1447,7 @@ def HandlePerformancePads(fire, event, m):
         if(_RepeatNote) and (_IsRepeating):
             _IsRepeating = False
             device.stopRepeatMidiEvent()
+            PlayMIDINote(chan, note, _velocityoff) #single note
 
     # print("---------------------------")
     
@@ -1600,7 +1589,7 @@ def HandleMacros(fire, event, PadIndex):
         if MacroIndex == 2:
             if(fire.AltHeld):
                 xx = GetBeatLenInMS(0)
-                print('repeat is disabled') #ToggleRepeat() #
+                ToggleRepeat() #print('repeat is disabled') #
             else:
                 NextSnap()
         
@@ -1611,7 +1600,6 @@ def HandleMacros(fire, event, PadIndex):
             else:
                 ui.showWindow(widChannelRack)
                 ui.copy()
-
 
         if MacroIndex == 4:
             ClearMidi(fire)
